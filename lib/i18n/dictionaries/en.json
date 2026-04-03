@@ -58,7 +58,12 @@
         "clickToEdit": "Click to edit",
         "editMessage": "Edit message",
         "saveAndSubmit": "Save & Submit",
-        "ExtractURL": "Extract from URL"
+        "ExtractURL": "Extract from URL",
+        "selectionContext": "Selection context",
+        "selectionContextDescription": "Optional target hint sent with your chat request. Paste an ID, label, or XML snippet for the object you want to change.",
+        "selectionContextPlaceholder": "Example: node id=payment-service, label=Payment Service, or paste the selected mxCell XML...",
+        "selectionContextTooltip": "Add selection context",
+        "selectionContextAttached": "Selection context attached"
     },
     "examples": {
         "title": "Create diagrams with AI",

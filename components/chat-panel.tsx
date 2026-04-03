@@ -122,6 +122,8 @@ export default function ChatPanel({
         resolverRef,
         chartXML,
         latestSvg,
+        selectionContext,
+        setSelectionContext,
         clearDiagram,
         getThumbnailSvg,
         captureValidationPng,
@@ -531,6 +533,7 @@ export default function ChatPanel({
             } | null,
         ) => {
             const hasRealDiagram = isRealDiagram(data?.diagramXml)
+            setSelectionContext("")
             if (data) {
                 // Mark all message IDs as loaded from session
                 const messageIds = (data.messages as any[]).map(
@@ -560,7 +563,13 @@ export default function ChatPanel({
                 setDiagramHistory([])
             }
         },
-        [setMessages, onDisplayChart, clearDiagram, setDiagramHistory],
+        [
+            setMessages,
+            onDisplayChart,
+            clearDiagram,
+            setDiagramHistory,
+            setSelectionContext,
+        ],
     )
 
     // Helper: Build session data object for saving (eliminates duplication)
@@ -1069,7 +1078,15 @@ export default function ChatPanel({
         sendMessage(
             { parts },
             {
-                body: { xml, previousXml, sessionId, customSystemMessage },
+                body: {
+                    xml,
+                    previousXml,
+                    sessionId,
+                    customSystemMessage,
+                    ...(selectionContext.trim() && {
+                        selectionContext: selectionContext.trim(),
+                    }),
+                },
                 headers: {
                     "x-access-code": config.accessCode,
                     ...(config.aiProvider && {

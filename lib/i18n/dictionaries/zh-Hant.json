@@ -58,7 +58,12 @@
         "clickToEdit": "點擊編輯",
         "editMessage": "編輯訊息",
         "saveAndSubmit": "儲存並提交",
-        "ExtractURL": "從 URL 擷取"
+        "ExtractURL": "從 URL 擷取",
+        "selectionContext": "選取上下文",
+        "selectionContextDescription": "可選的目標提示，會隨本次對話一起送出。你可以貼上要修改物件的 ID、標籤，或一段 XML 片段。",
+        "selectionContextPlaceholder": "例如：node id=payment-service，label=支付服務，或貼上選取節點的 mxCell XML...",
+        "selectionContextTooltip": "加入選取上下文",
+        "selectionContextAttached": "已附加選取上下文"
     },
     "examples": {
         "title": "用 AI 建立圖表",

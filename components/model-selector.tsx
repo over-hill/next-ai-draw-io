@@ -158,7 +158,10 @@ export function ModelSelector({
     }, [])
 
     return (
-        <div ref={wrapperRef} className="inline-block">
+        <div
+            ref={wrapperRef}
+            className="inline-block min-w-0 max-w-[min(44vw,260px)]"
+        >
             <ModelSelectorRoot open={open} onOpenChange={setOpen}>
                 <ModelSelectorTrigger asChild>
                     <ButtonWithTooltip
@@ -167,7 +170,7 @@ export function ModelSelector({
                         size="sm"
                         disabled={disabled}
                         className={cn(
-                            "hover:bg-accent gap-1.5 h-8 px-2 transition-[padding,background-color] duration-150 ease-in-out",
+                            "hover:bg-accent gap-1.5 h-8 max-w-[min(44vw,260px)] px-2 transition-[padding,background-color] duration-150 ease-in-out",
                             !showLabel && "px-1.5 justify-center",
                         )}
                         // accessibility: expose label to screen readers
@@ -176,7 +179,7 @@ export function ModelSelector({
                         <Bot className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         {/* show/hide visible label based on measured width */}
                         {showLabel ? (
-                            <span className="text-xs truncate">
+                            <span className="min-w-0 flex-1 truncate text-left text-xs">
                                 {selectedModel
                                     ? selectedModel.modelId
                                     : dict.modelConfig.default}

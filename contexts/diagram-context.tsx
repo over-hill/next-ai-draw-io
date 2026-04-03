@@ -15,6 +15,8 @@ import {
 interface DiagramContextType {
     chartXML: string
     latestSvg: string
+    selectionContext: string
+    setSelectionContext: (context: string) => void
     diagramHistory: { svg: string; xml: string }[]
     setDiagramHistory: (history: { svg: string; xml: string }[]) => void
     loadDiagram: (chart: string, skipValidation?: boolean) => string | null
@@ -45,6 +47,7 @@ const DiagramContext = createContext<DiagramContextType | undefined>(undefined)
 export function DiagramProvider({ children }: { children: React.ReactNode }) {
     const [chartXML, setChartXML] = useState<string>("")
     const [latestSvg, setLatestSvg] = useState<string>("")
+    const [selectionContext, setSelectionContext] = useState<string>("")
     const [diagramHistory, setDiagramHistory] = useState<
         { svg: string; xml: string }[]
     >([])
@@ -282,6 +285,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         // Skip validation for trusted internal template (loadDiagram also sets chartXML)
         loadDiagram(emptyDiagram, true)
         setLatestSvg("")
+        setSelectionContext("")
         setDiagramHistory([])
     }
 
@@ -399,6 +403,8 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
             value={{
                 chartXML,
                 latestSvg,
+                selectionContext,
+                setSelectionContext,
                 diagramHistory,
                 setDiagramHistory,
                 loadDiagram,

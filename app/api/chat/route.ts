@@ -96,6 +96,10 @@ async function handleChatRequest(req: Request): Promise<Response> {
         typeof body.customSystemMessage === "string"
             ? body.customSystemMessage.slice(0, 5000)
             : ""
+    const selectionContext =
+        typeof body.selectionContext === "string"
+            ? body.selectionContext.slice(0, 8000).trim()
+            : ""
 
     // Get user ID for Langfuse tracking and quota
     const userId = getUserIdFromRequest(req)
@@ -463,7 +467,16 @@ ${previousXml}
 ${xml || ""}
 """
 
-IMPORTANT: The "Current diagram XML" is the SINGLE SOURCE OF TRUTH for what's on the canvas right now. The user can manually add, delete, or modify shapes directly in draw.io. Always count and describe elements based on the CURRENT XML, not on what you previously generated. If both previous and current XML are shown, compare them to understand what the user changed. When using edit_diagram, COPY search patterns exactly from the CURRENT XML - attribute order matters!`
+${
+    selectionContext
+        ? `User-provided selection context (use this to resolve references like "this", "it", or "the selected node"):
+"""text
+${selectionContext}
+"""
+
+`
+        : ""
+}IMPORTANT: The "Current diagram XML" is the SINGLE SOURCE OF TRUTH for what's on the canvas right now. The user can manually add, delete, or modify shapes directly in draw.io. Always count and describe elements based on the CURRENT XML, not on what you previously generated. If both previous and current XML are shown, compare them to understand what the user changed. When using edit_diagram, COPY search patterns exactly from the CURRENT XML - attribute order matters!${selectionContext ? ` If selection context is provided, use it to identify the intended target when the user says "this", "it", or "selected", but verify all details against the current XML before editing.` : ""}`
 
     const systemMessages = isSingleSystemProvider
         ? [

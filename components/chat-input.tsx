@@ -2,6 +2,7 @@
 
 import {
     BookmarkPlus,
+    Crosshair,
     Download,
     History,
     Image as ImageIcon,
@@ -207,6 +208,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
         const dict = useDictionary()
         const {
             chartXML,
+            selectionContext,
+            setSelectionContext,
             diagramHistory,
             saveDiagramToFile,
             showSaveDialog,
@@ -239,11 +242,13 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
         const [showHistory, setShowHistory] = useState(false)
         const [showUrlDialog, setShowUrlDialog] = useState(false)
         const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false)
+        const [showSelectionEditor, setShowSelectionEditor] = useState(false)
         const [isExtractingUrl, setIsExtractingUrl] = useState(false)
         const [sendShortcut, setSendShortcut] = useState("ctrl-enter")
         // Allow retry when there's an error (even if status is still "streaming" or "submitted")
         const isDisabled =
             (status === "streaming" || status === "submitted") && !error
+        const hasSelectionContext = selectionContext.trim().length > 0
 
         const adjustTextareaHeight = useCallback(() => {
             const textarea = textareaRef.current
@@ -474,6 +479,47 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                     </div>
                 )}
                 <div className="relative rounded-2xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all duration-200">
+                    {(showSelectionEditor || hasSelectionContext) && (
+                        <div className="border-b border-border/50 bg-muted/20 px-4 py-3">
+                            <div className="mb-2 flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-medium text-foreground">
+                                        {dict.chat.selectionContext}
+                                    </p>
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                        {dict.chat.selectionContextDescription}
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={
+                                        isDisabled && !hasSelectionContext
+                                    }
+                                    onClick={() => {
+                                        setSelectionContext("")
+                                        setShowSelectionEditor(false)
+                                    }}
+                                    className="h-7 px-2 text-xs text-muted-foreground"
+                                >
+                                    {dict.common.clear}
+                                </Button>
+                            </div>
+                            <Textarea
+                                value={selectionContext}
+                                onChange={(e) =>
+                                    setSelectionContext(e.target.value)
+                                }
+                                placeholder={
+                                    dict.chat.selectionContextPlaceholder
+                                }
+                                disabled={isDisabled}
+                                aria-label={dict.chat.selectionContext}
+                                className="min-h-[78px] max-h-[180px] resize-none border-border/60 bg-background/80 px-3 py-2 text-xs focus-visible:ring-1 focus-visible:ring-primary/20"
+                            />
+                        </div>
+                    )}
                     <Textarea
                         ref={textareaRef}
                         value={input}
@@ -546,6 +592,28 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 type="button"
                                 variant="ghost"
                                 size="sm"
+                                onClick={() =>
+                                    setShowSelectionEditor((prev) => !prev)
+                                }
+                                disabled={isDisabled && !hasSelectionContext}
+                                tooltipContent={
+                                    hasSelectionContext
+                                        ? dict.chat.selectionContextAttached
+                                        : dict.chat.selectionContextTooltip
+                                }
+                                className={`h-8 w-8 p-0 hover:text-foreground ${
+                                    hasSelectionContext
+                                        ? "text-primary"
+                                        : "text-muted-foreground"
+                                }`}
+                            >
+                                <Crosshair className="h-4 w-4" />
+                            </ButtonWithTooltip>
+
+                            <ButtonWithTooltip
+                                type="button"
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => setShowSaveAsTemplate(true)}
                                 disabled={isDisabled || !input.trim()}
                                 tooltipContent={dict.templates.saveAsTemplate}
@@ -564,15 +632,17 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 disabled={isDisabled}
                             />
                         </div>
-                        <ModelSelector
-                            models={models}
-                            selectedModelId={selectedModelId}
-                            onSelect={onModelSelect}
-                            onConfigure={onConfigureModels}
-                            disabled={isDisabled}
-                            showUnvalidatedModels={showUnvalidatedModels}
-                        />
-                        <div className="w-px h-5 bg-border mx-1" />
+                        <div className="max-w-[min(44vw,260px)] min-w-0 shrink-0">
+                            <ModelSelector
+                                models={models}
+                                selectedModelId={selectedModelId}
+                                onSelect={onModelSelect}
+                                onConfigure={onConfigureModels}
+                                disabled={isDisabled}
+                                showUnvalidatedModels={showUnvalidatedModels}
+                            />
+                        </div>
+                        <div className="h-5 w-px shrink-0 bg-border mx-1" />
                         {(status === "streaming" || status === "submitted") &&
                         onStop ? (
                             <Button
@@ -580,7 +650,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 onClick={onStop}
                                 size="sm"
                                 variant="destructive"
-                                className="h-8 w-8 p-0 rounded-xl shadow-sm"
+                                className="h-8 w-8 shrink-0 rounded-xl p-0 shadow-sm"
                                 aria-label={dict.chat.stopGeneration}
                             >
                                 <Square className="h-4 w-4" />
@@ -590,7 +660,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 type="submit"
                                 disabled={isDisabled || !input.trim()}
                                 size="sm"
-                                className="h-8 px-4 rounded-xl font-medium shadow-sm"
+                                className="h-8 shrink-0 rounded-xl px-4 font-medium shadow-sm"
                                 aria-label={dict.chat.send}
                             >
                                 <Send className="h-4 w-4 mr-1.5" />

@@ -58,7 +58,12 @@
         "clickToEdit": "クリックして編集",
         "editMessage": "メッセージを編集",
         "saveAndSubmit": "保存して送信",
-        "ExtractURL": "URLから抽出"
+        "ExtractURL": "URLから抽出",
+        "selectionContext": "選択コンテキスト",
+        "selectionContextDescription": "任意の対象ヒントで、この会話リクエストと一緒に送信されます。変更したい要素の ID、ラベル、または XML 断片を貼り付けてください。",
+        "selectionContextPlaceholder": "例: node id=payment-service、label=Payment Service、または選択した mxCell XML を貼り付け...",
+        "selectionContextTooltip": "選択コンテキストを追加",
+        "selectionContextAttached": "選択コンテキストを追加済み"
     },
     "examples": {
         "title": "AI でダイアグラムを作成",
