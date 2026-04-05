@@ -1,7 +1,14 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useRef, useState } from "react"
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
+} from "react"
 import type { DrawIoEmbedRef } from "react-drawio"
 import { toast } from "sonner"
 import type { ExportFormat } from "@/components/save-dialog"
@@ -12,11 +19,25 @@ import {
     validateAndFixXml,
 } from "../lib/utils"
 
+type SelectionContextSource = "manual" | "auto" | null
+
+const EMPTY_DIAGRAM_XML = `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>`
+
+interface DiagramAutoSaveData {
+    xml?: string
+    currentPage?: number
+}
+
 interface DiagramContextType {
     chartXML: string
     latestSvg: string
     selectionContext: string
+    selectionContextSource: SelectionContextSource
+    selectionContextEnabled: boolean
     setSelectionContext: (context: string) => void
+    setSelectionContextEnabled: (enabled: boolean) => void
+    setAutoSelectionContext: (context: string) => void
+    clearSelectionContext: () => void
     diagramHistory: { svg: string; xml: string }[]
     setDiagramHistory: (history: { svg: string; xml: string }[]) => void
     loadDiagram: (chart: string, skipValidation?: boolean) => string | null
@@ -25,7 +46,7 @@ interface DiagramContextType {
     resolverRef: React.MutableRefObject<((value: string) => void) | null>
     drawioRef: React.MutableRefObject<DrawIoEmbedRef | null>
     handleDiagramExport: (data: any) => void
-    handleDiagramAutoSave: (data: { xml?: string }) => void
+    handleDiagramAutoSave: (data: DiagramAutoSaveData) => void
     clearDiagram: () => void
     saveDiagramToFile: (
         filename: string,
@@ -48,6 +69,9 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
     const [chartXML, setChartXML] = useState<string>("")
     const [latestSvg, setLatestSvg] = useState<string>("")
     const [selectionContext, setSelectionContext] = useState<string>("")
+    const [selectionContextSource, setSelectionContextSource] =
+        useState<SelectionContextSource>(null)
+    const [selectionContextEnabled, setSelectionContextEnabled] = useState(true)
     const [diagramHistory, setDiagramHistory] = useState<
         { svg: string; xml: string }[]
     >([])
@@ -62,6 +86,39 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
     const expectHistoryExportRef = useRef<boolean>(false)
     // Track latest chartXML for restoration after remount
     const chartXMLRef = useRef<string>("")
+    const multiPageWarningShownRef = useRef(false)
+    const selectionContextRef = useRef<string>("")
+    const selectionContextSourceRef = useRef<SelectionContextSource>(null)
+
+    useEffect(() => {
+        selectionContextRef.current = selectionContext
+    }, [selectionContext])
+
+    useEffect(() => {
+        selectionContextSourceRef.current = selectionContextSource
+    }, [selectionContextSource])
+
+    const setManualSelectionContext = useCallback((context: string) => {
+        setSelectionContext(context)
+        setSelectionContextSource(context.trim().length > 0 ? "manual" : null)
+    }, [])
+
+    const setAutoSelectionContext = useCallback((context: string) => {
+        if (
+            selectionContextSourceRef.current === "manual" &&
+            selectionContextRef.current.trim().length > 0
+        ) {
+            return
+        }
+
+        setSelectionContext(context)
+        setSelectionContextSource(context.trim().length > 0 ? "auto" : null)
+    }, [])
+
+    const clearSelectionContext = useCallback(() => {
+        setSelectionContext("")
+        setSelectionContextSource(null)
+    }, [])
 
     const onDrawioLoad = () => {
         // Only set ready state once to prevent infinite loops
@@ -270,8 +327,28 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         }
     }
 
-    const handleDiagramAutoSave = (data: { xml?: string }) => {
+    const handleDiagramAutoSave = (data: DiagramAutoSaveData) => {
         if (!data?.xml) return
+
+        if (typeof data.currentPage === "number" && data.currentPage > 0) {
+            const fallbackXml = chartXMLRef.current || EMPTY_DIAGRAM_XML
+
+            if (!multiPageWarningShownRef.current) {
+                multiPageWarningShownRef.current = true
+                toast.error(
+                    "Multi-page diagrams are not supported yet. Please keep everything on Page-1.",
+                )
+            }
+
+            lastRestoredXmlRef.current = fallbackXml
+            if (drawioRef.current) {
+                drawioRef.current.load({ xml: fallbackXml })
+            }
+            setChartXML(fallbackXml)
+            return
+        }
+
+        multiPageWarningShownRef.current = false
         // Don't overwrite a pending restore - if we have a real diagram in state
         // but DrawIO isn't ready yet, it means we're waiting to restore
         if (!isDrawioReady && isRealDiagram(chartXML)) {
@@ -281,11 +358,10 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
     }
 
     const clearDiagram = () => {
-        const emptyDiagram = `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>`
         // Skip validation for trusted internal template (loadDiagram also sets chartXML)
-        loadDiagram(emptyDiagram, true)
+        loadDiagram(EMPTY_DIAGRAM_XML, true)
         setLatestSvg("")
-        setSelectionContext("")
+        clearSelectionContext()
         setDiagramHistory([])
     }
 
@@ -404,7 +480,12 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
                 chartXML,
                 latestSvg,
                 selectionContext,
-                setSelectionContext,
+                selectionContextSource,
+                selectionContextEnabled,
+                setSelectionContext: setManualSelectionContext,
+                setSelectionContextEnabled,
+                setAutoSelectionContext,
+                clearSelectionContext,
                 diagramHistory,
                 setDiagramHistory,
                 loadDiagram,

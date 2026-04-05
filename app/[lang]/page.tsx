@@ -10,8 +10,230 @@ import {
     ResizablePanelGroup,
 } from "@/components/ui/resizable"
 import { useDiagram } from "@/contexts/diagram-context"
+import { getAssetUrl } from "@/lib/base-path"
 import { i18n, type Locale } from "@/lib/i18n/config"
 import { isIndexedDBUsable } from "@/lib/session-storage"
+
+const DRAWIO_SELECTION_MESSAGE_SOURCE = "next-ai-drawio-selection-context"
+
+type DrawioBridgeWindow = Window & {
+    __NEXT_AI_DRAWIO_SELECTION_BRIDGE__?: boolean
+}
+
+function getDrawioIframe() {
+    return document.querySelector(
+        "iframe.diagrams-iframe",
+    ) as HTMLIFrameElement | null
+}
+
+function toAbsoluteDrawioUrl(baseUrl: string, origin: string) {
+    try {
+        return new URL(baseUrl, origin).toString()
+    } catch {
+        return baseUrl
+    }
+}
+
+function getSameOriginDrawioBaseUrl(origin: string) {
+    return toAbsoluteDrawioUrl(getAssetUrl("/drawio/index.html"), origin)
+}
+
+function buildSelectionBridgeScript(messageSource: string) {
+    return `
+;(() => {
+    if (window.__NEXT_AI_DRAWIO_SELECTION_BRIDGE__) {
+        return
+    }
+
+    window.__NEXT_AI_DRAWIO_SELECTION_BRIDGE__ = true
+
+    const MESSAGE_SOURCE = ${JSON.stringify(messageSource)}
+    const MAX_SELECTED_CELLS = 10
+    const MAX_CONTEXT_LENGTH = 6000
+
+    const normalize = (value) => String(value ?? "").replace(/\\s+/g, " ").trim()
+
+    const encodeCell = (cell) => {
+        try {
+            if (!cell || typeof window.mxCodec !== "function" || !window.mxUtils) {
+                return ""
+            }
+
+            const codec = new window.mxCodec(window.mxUtils.createXmlDocument())
+            const node = codec.encode(cell)
+            return node ? normalize(window.mxUtils.getXml(node)) : ""
+        } catch {
+            return ""
+        }
+    }
+
+    const buildSelectionContext = (graph) => {
+        try {
+            if (!graph || typeof graph.getSelectionCells !== "function") {
+                return ""
+            }
+
+            const cells = (graph.getSelectionCells() || []).slice(0, MAX_SELECTED_CELLS)
+            if (!cells.length) {
+                return ""
+            }
+
+            const lines = ["Selected draw.io cells:", "count=" + cells.length]
+
+            cells.forEach((cell, index) => {
+                const geometry =
+                    typeof cell.getGeometry === "function"
+                        ? cell.getGeometry()
+                        : cell.geometry
+                const parent =
+                    typeof cell.getParent === "function" ? cell.getParent() : cell.parent
+                const source =
+                    typeof cell.getSource === "function" ? cell.getSource() : cell.source
+                const target =
+                    typeof cell.getTarget === "function" ? cell.getTarget() : cell.target
+                const value =
+                    typeof cell.getValue === "function" ? cell.getValue() : cell.value
+
+                lines.push("")
+                lines.push("cell " + (index + 1) + ":")
+                if (cell.id != null) {
+                    lines.push("id=" + cell.id)
+                }
+                lines.push(cell.edge ? "type=edge" : "type=vertex")
+
+                const normalizedValue = normalize(value)
+                if (normalizedValue) {
+                    lines.push("value=" + normalizedValue)
+                }
+
+                if (parent && parent.id != null) {
+                    lines.push("parent=" + parent.id)
+                }
+                if (source && source.id != null) {
+                    lines.push("source=" + source.id)
+                }
+                if (target && target.id != null) {
+                    lines.push("target=" + target.id)
+                }
+
+                if (geometry) {
+                    if (geometry.x != null) {
+                        lines.push("x=" + geometry.x)
+                    }
+                    if (geometry.y != null) {
+                        lines.push("y=" + geometry.y)
+                    }
+                    if (geometry.width != null) {
+                        lines.push("width=" + geometry.width)
+                    }
+                    if (geometry.height != null) {
+                        lines.push("height=" + geometry.height)
+                    }
+                }
+
+                const style = normalize(cell.style)
+                if (style) {
+                    lines.push("style=" + style)
+                }
+
+                const xml = encodeCell(cell)
+                if (xml) {
+                    lines.push("xml=" + xml)
+                }
+            })
+
+            return lines.join("\\n").slice(0, MAX_CONTEXT_LENGTH)
+        } catch {
+            return ""
+        }
+    }
+
+    const postSelection = (graph) => {
+        try {
+            window.parent.postMessage(
+                {
+                    source: MESSAGE_SOURCE,
+                    selectionContext: buildSelectionContext(graph),
+                },
+                "*",
+            )
+        } catch {
+            // Ignore parent messaging failures.
+        }
+    }
+
+    const attachGraph = (graph) => {
+        if (!graph || graph.__NEXT_AI_SELECTION_BRIDGE_ATTACHED__) {
+            return false
+        }
+
+        graph.__NEXT_AI_SELECTION_BRIDGE_ATTACHED__ = true
+
+        try {
+            const selectionModel =
+                typeof graph.getSelectionModel === "function"
+                    ? graph.getSelectionModel()
+                    : null
+
+            if (
+                selectionModel &&
+                typeof selectionModel.addListener === "function" &&
+                window.mxEvent
+            ) {
+                selectionModel.addListener(window.mxEvent.CHANGE, () => {
+                    postSelection(graph)
+                })
+            }
+        } catch {
+            // Ignore listener registration failures and still emit once below.
+        }
+
+        window.setTimeout(() => postSelection(graph), 0)
+        return true
+    }
+
+    const tryAttachKnownGraph = () => {
+        const candidates = [
+            window.ui?.editor?.graph,
+            window.editorUi?.editor?.graph,
+            window.editor?.graph,
+        ]
+
+        return candidates.some((graph) => attachGraph(graph))
+    }
+
+    if (
+        window.mxGraphSelectionModel &&
+        !window.mxGraphSelectionModel.prototype.__NEXT_AI_SELECTION_BRIDGE_WRAPPED__
+    ) {
+        const originalChangeSelection =
+            window.mxGraphSelectionModel.prototype.changeSelection
+
+        window.mxGraphSelectionModel.prototype.changeSelection = function () {
+            const result = originalChangeSelection.apply(this, arguments)
+
+            if (this.graph) {
+                attachGraph(this.graph)
+                postSelection(this.graph)
+            }
+
+            return result
+        }
+
+        window.mxGraphSelectionModel.prototype.__NEXT_AI_SELECTION_BRIDGE_WRAPPED__ = true
+    }
+
+    let attempts = 0
+    const timer = window.setInterval(() => {
+        attempts += 1
+
+        if (tryAttachKnownGraph() || attempts >= 40) {
+            window.clearInterval(timer)
+        }
+    }, 250)
+})()
+`
+}
 
 export default function Home() {
     const {
@@ -20,6 +242,7 @@ export default function Home() {
         handleDiagramAutoSave,
         onDrawioLoad,
         resetDrawioReady,
+        setAutoSelectionContext,
     } = useDiagram()
     const router = useRouter()
     const pathname = usePathname()
@@ -73,15 +296,25 @@ export default function Home() {
             document.documentElement.classList.toggle("dark", prefersDark)
         }
 
-        // Detect Electron and use bundled draw.io files for offline use
-        // Note: react-drawio uses `new URL(baseUrl)` so we need absolute URL
-        // Include /index.html because Next.js doesn't auto-serve index.html for directories
-        const electronDetected =
-            !process.env.NEXT_PUBLIC_DRAWIO_BASE_URL &&
-            !!(window as unknown as { electronAPI?: unknown }).electronAPI
+        const electronDetected = !!(
+            window as unknown as { electronAPI?: unknown }
+        ).electronAPI
+
+        if (process.env.NEXT_PUBLIC_DRAWIO_BASE_URL) {
+            setDrawioBaseUrl(
+                toAbsoluteDrawioUrl(
+                    process.env.NEXT_PUBLIC_DRAWIO_BASE_URL,
+                    window.location.origin,
+                ),
+            )
+        } else {
+            // Serve draw.io from the same origin so selection context can be
+            // read from the iframe in normal browser mode.
+            setDrawioBaseUrl(getSameOriginDrawioBaseUrl(window.location.origin))
+        }
+
         if (electronDetected) {
             setIsElectron(true)
-            setDrawioBaseUrl(`${window.location.origin}/drawio/index.html`)
         }
 
         void (async () => {
@@ -94,8 +327,9 @@ export default function Home() {
 
     const handleDrawioLoad = useCallback(() => {
         setIsDrawioReady(true)
+        setAutoSelectionContext("")
         onDrawioLoad()
-    }, [onDrawioLoad])
+    }, [onDrawioLoad, setAutoSelectionContext])
 
     const handleDrawioAutoSave = useCallback(
         (data: { xml?: string }) => {
@@ -172,6 +406,89 @@ export default function Home() {
         window.addEventListener("keydown", handleKeyDown)
         return () => window.removeEventListener("keydown", handleKeyDown)
     }, [])
+
+    useEffect(() => {
+        const handleSelectionMessage = (event: MessageEvent) => {
+            const iframe = getDrawioIframe()
+            if (!iframe || event.source !== iframe.contentWindow) {
+                return
+            }
+
+            const data = event.data
+            if (
+                !data ||
+                typeof data !== "object" ||
+                !("source" in data) ||
+                data.source !== DRAWIO_SELECTION_MESSAGE_SOURCE
+            ) {
+                return
+            }
+
+            setAutoSelectionContext(
+                "selectionContext" in data &&
+                    typeof data.selectionContext === "string"
+                    ? data.selectionContext
+                    : "",
+            )
+        }
+
+        window.addEventListener("message", handleSelectionMessage)
+        return () =>
+            window.removeEventListener("message", handleSelectionMessage)
+    }, [setAutoSelectionContext])
+
+    useEffect(() => {
+        if (!isDrawioReady) {
+            return
+        }
+
+        let attempts = 0
+        const tryInstallBridge = () => {
+            attempts += 1
+
+            const iframe = getDrawioIframe()
+            if (!iframe) {
+                return false
+            }
+
+            try {
+                const iframeWindow =
+                    iframe.contentWindow as DrawioBridgeWindow | null
+                const iframeDocument = iframeWindow?.document
+                if (!iframeWindow || !iframeDocument) {
+                    return false
+                }
+
+                if (iframeWindow.__NEXT_AI_DRAWIO_SELECTION_BRIDGE__) {
+                    return true
+                }
+
+                const script = iframeDocument.createElement("script")
+                script.textContent = buildSelectionBridgeScript(
+                    DRAWIO_SELECTION_MESSAGE_SOURCE,
+                )
+                ;(
+                    iframeDocument.head || iframeDocument.documentElement
+                ).appendChild(script)
+                script.remove()
+                return true
+            } catch {
+                return false
+            }
+        }
+
+        if (tryInstallBridge()) {
+            return
+        }
+
+        const timer = window.setInterval(() => {
+            if (tryInstallBridge() || attempts >= 12) {
+                window.clearInterval(timer)
+            }
+        }, 250)
+
+        return () => window.clearInterval(timer)
+    }, [drawioBaseUrl, isDrawioReady])
 
     return (
         <div className="h-screen bg-background relative overflow-hidden">

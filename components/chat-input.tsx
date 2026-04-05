@@ -28,7 +28,13 @@ import { ModelSelector } from "@/components/model-selector"
 import { SaveDialog } from "@/components/save-dialog"
 
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { UrlInputDialog } from "@/components/url-input-dialog"
 import { useDiagram } from "@/contexts/diagram-context"
 import { useDictionary } from "@/hooks/use-dictionary"
@@ -37,7 +43,7 @@ import { isPdfFile, isTextFile } from "@/lib/pdf-utils"
 import { STORAGE_KEYS } from "@/lib/storage"
 import type { FlattenedModel } from "@/lib/types/model-config"
 import { extractUrlContent, type UrlData } from "@/lib/url-utils"
-import { isRealDiagram } from "@/lib/utils"
+import { cn, isRealDiagram } from "@/lib/utils"
 import { FilePreviewList } from "./file-preview-list"
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024 // 2MB
@@ -148,6 +154,31 @@ function showValidationErrors(errors: string[], dict: any) {
     }
 }
 
+function buildSelectionSummary(selectionContext: string): string {
+    const lines = selectionContext
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .filter((line) => !line.startsWith("xml="))
+
+    if (lines.length === 0) {
+        return ""
+    }
+
+    const preferredLines = [
+        lines.find((line) => line.startsWith("count=")),
+        lines.find((line) => line.startsWith("id=")),
+        lines.find((line) => line.startsWith("value=")),
+        lines.find((line) => line.startsWith("type=")),
+    ].filter((line): line is string => Boolean(line))
+
+    const summary = (preferredLines.length > 0 ? preferredLines : lines)
+        .join(" • ")
+        .replace(/^Selected draw\.io cells:\s*/i, "")
+
+    return summary.length > 120 ? `${summary.slice(0, 117)}...` : summary
+}
+
 export interface ChatInputRef {
     focus: () => void
 }
@@ -209,7 +240,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
         const {
             chartXML,
             selectionContext,
-            setSelectionContext,
+            selectionContextEnabled,
+            setSelectionContextEnabled,
             diagramHistory,
             saveDiagramToFile,
             showSaveDialog,
@@ -242,13 +274,12 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
         const [showHistory, setShowHistory] = useState(false)
         const [showUrlDialog, setShowUrlDialog] = useState(false)
         const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false)
-        const [showSelectionEditor, setShowSelectionEditor] = useState(false)
         const [isExtractingUrl, setIsExtractingUrl] = useState(false)
         const [sendShortcut, setSendShortcut] = useState("ctrl-enter")
-        // Allow retry when there's an error (even if status is still "streaming" or "submitted")
-        const isDisabled =
+        const isRequestInFlight =
             (status === "streaming" || status === "submitted") && !error
         const hasSelectionContext = selectionContext.trim().length > 0
+        const selectionSummary = buildSelectionSummary(selectionContext)
 
         const adjustTextareaHeight = useCallback(() => {
             const textarea = textareaRef.current
@@ -297,15 +328,13 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
             if (shouldSend) {
                 e.preventDefault()
                 const form = e.currentTarget.closest("form")
-                if (form && input.trim() && !isDisabled) {
+                if (form && input.trim() && !isRequestInFlight) {
                     form.requestSubmit()
                 }
             }
         }
 
         const handlePaste = async (e: React.ClipboardEvent) => {
-            if (isDisabled) return
-
             const items = e.clipboardData.items
             const imageItems = Array.from(items).filter((item) =>
                 item.type.startsWith("image/"),
@@ -382,8 +411,6 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
             e.preventDefault()
             e.stopPropagation()
             setIsDragging(false)
-
-            if (isDisabled) return
 
             const droppedFiles = e.dataTransfer.files
             const supportedFiles = Array.from(droppedFiles).filter((file) =>
@@ -479,45 +506,35 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                     </div>
                 )}
                 <div className="relative rounded-2xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all duration-200">
-                    {(showSelectionEditor || hasSelectionContext) && (
-                        <div className="border-b border-border/50 bg-muted/20 px-4 py-3">
-                            <div className="mb-2 flex items-start justify-between gap-3">
-                                <div className="space-y-1">
-                                    <p className="text-xs font-medium text-foreground">
-                                        {dict.chat.selectionContext}
-                                    </p>
-                                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                        {dict.chat.selectionContextDescription}
-                                    </p>
-                                </div>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled={
-                                        isDisabled && !hasSelectionContext
-                                    }
-                                    onClick={() => {
-                                        setSelectionContext("")
-                                        setShowSelectionEditor(false)
-                                    }}
-                                    className="h-7 px-2 text-xs text-muted-foreground"
+                    {selectionContextEnabled && hasSelectionContext && (
+                        <div className="border-b border-border/50 bg-muted/20 px-3 py-2">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-border/50 bg-background/80 px-3 py-2">
+                                        <Crosshair className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                        <div className="min-w-0">
+                                            <p className="text-[11px] font-medium text-foreground">
+                                                {
+                                                    dict.chat
+                                                        .selectionContextAttached
+                                                }
+                                            </p>
+                                            <p className="truncate text-[11px] text-muted-foreground">
+                                                {selectionSummary ||
+                                                    dict.chat
+                                                        .selectionContextDescription}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    side="top"
+                                    sideOffset={6}
+                                    className="max-h-72 max-w-md overflow-y-auto whitespace-pre-wrap px-3 py-2 text-[11px] leading-relaxed"
                                 >
-                                    {dict.common.clear}
-                                </Button>
-                            </div>
-                            <Textarea
-                                value={selectionContext}
-                                onChange={(e) =>
-                                    setSelectionContext(e.target.value)
-                                }
-                                placeholder={
-                                    dict.chat.selectionContextPlaceholder
-                                }
-                                disabled={isDisabled}
-                                aria-label={dict.chat.selectionContext}
-                                className="min-h-[78px] max-h-[180px] resize-none border-border/60 bg-background/80 px-3 py-2 text-xs focus-visible:ring-1 focus-visible:ring-primary/20"
-                            />
+                                    {selectionContext}
+                                </TooltipContent>
+                            </Tooltip>
                         </div>
                     )}
                     <Textarea
@@ -527,7 +544,6 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                         onKeyDown={handleKeyDown}
                         onPaste={handlePaste}
                         placeholder={dict.chat.placeholder}
-                        disabled={isDisabled}
                         aria-label="Chat input"
                         className="min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent px-4 py-3 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60 scrollbar-thin"
                     />
@@ -539,9 +555,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setShowHistory(true)}
-                                disabled={
-                                    isDisabled || diagramHistory.length === 0
-                                }
+                                disabled={diagramHistory.length === 0}
                                 tooltipContent={dict.chat.diagramHistory}
                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                             >
@@ -553,9 +567,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setShowSaveDialog(true)}
-                                disabled={
-                                    isDisabled || !isRealDiagram(chartXML)
-                                }
+                                disabled={!isRealDiagram(chartXML)}
                                 tooltipContent={dict.chat.saveDiagram}
                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                             >
@@ -567,7 +579,6 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 variant="ghost"
                                 size="sm"
                                 onClick={triggerFileInput}
-                                disabled={isDisabled}
                                 tooltipContent={dict.chat.uploadFile}
                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                             >
@@ -580,7 +591,6 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setShowUrlDialog(true)}
-                                    disabled={isDisabled}
                                     tooltipContent={dict.chat.ExtractURL}
                                     className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                                 >
@@ -588,34 +598,47 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 </ButtonWithTooltip>
                             )}
 
-                            <ButtonWithTooltip
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                    setShowSelectionEditor((prev) => !prev)
-                                }
-                                disabled={isDisabled && !hasSelectionContext}
-                                tooltipContent={
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div
+                                        className={cn(
+                                            "flex h-8 items-center gap-2 rounded-xl border px-2.5",
+                                            selectionContextEnabled
+                                                ? "border-primary/30 text-primary"
+                                                : "border-border/60 text-muted-foreground",
+                                            isRequestInFlight && "opacity-80",
+                                        )}
+                                    >
+                                        <Crosshair className="h-3.5 w-3.5 shrink-0" />
+                                        <Switch
+                                            checked={selectionContextEnabled}
+                                            onCheckedChange={
+                                                setSelectionContextEnabled
+                                            }
+                                            aria-label={
+                                                dict.chat.selectionContext
+                                            }
+                                        />
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    side="top"
+                                    sideOffset={6}
+                                    className="max-w-xs text-wrap"
+                                >
+                                    {selectionContextEnabled &&
                                     hasSelectionContext
-                                        ? dict.chat.selectionContextAttached
-                                        : dict.chat.selectionContextTooltip
-                                }
-                                className={`h-8 w-8 p-0 hover:text-foreground ${
-                                    hasSelectionContext
-                                        ? "text-primary"
-                                        : "text-muted-foreground"
-                                }`}
-                            >
-                                <Crosshair className="h-4 w-4" />
-                            </ButtonWithTooltip>
+                                        ? `${dict.chat.selectionContextAttached}\n${selectionSummary}`
+                                        : dict.chat.selectionContextTooltip}
+                                </TooltipContent>
+                            </Tooltip>
 
                             <ButtonWithTooltip
                                 type="button"
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setShowSaveAsTemplate(true)}
-                                disabled={isDisabled || !input.trim()}
+                                disabled={!input.trim()}
                                 tooltipContent={dict.templates.saveAsTemplate}
                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                             >
@@ -629,7 +652,6 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 onChange={handleFileChange}
                                 accept="image/*,.pdf,application/pdf,text/*,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
                                 multiple
-                                disabled={isDisabled}
                             />
                         </div>
                         <div className="max-w-[min(44vw,260px)] min-w-0 shrink-0">
@@ -638,7 +660,6 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 selectedModelId={selectedModelId}
                                 onSelect={onModelSelect}
                                 onConfigure={onConfigureModels}
-                                disabled={isDisabled}
                                 showUnvalidatedModels={showUnvalidatedModels}
                             />
                         </div>
@@ -658,7 +679,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                         ) : (
                             <Button
                                 type="submit"
-                                disabled={isDisabled || !input.trim()}
+                                disabled={isRequestInFlight || !input.trim()}
                                 size="sm"
                                 className="h-8 shrink-0 rounded-xl px-4 font-medium shadow-sm"
                                 aria-label={dict.chat.send}

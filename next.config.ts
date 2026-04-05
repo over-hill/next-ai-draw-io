@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
     env: {
         APP_VERSION: packageJson.version,
     },
+    async rewrites() {
+        return [
+            {
+                source: "/drawio/:path*",
+                destination: "https://embed.diagrams.net/:path*",
+            },
+        ]
+    },
     // Include instrumentation.ts in standalone build for Langfuse telemetry
     outputFileTracingIncludes: {
         "*": ["./instrumentation.ts"],

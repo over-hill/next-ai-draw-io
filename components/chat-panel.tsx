@@ -123,7 +123,8 @@ export default function ChatPanel({
         chartXML,
         latestSvg,
         selectionContext,
-        setSelectionContext,
+        selectionContextEnabled,
+        clearSelectionContext,
         clearDiagram,
         getThumbnailSvg,
         captureValidationPng,
@@ -533,7 +534,7 @@ export default function ChatPanel({
             } | null,
         ) => {
             const hasRealDiagram = isRealDiagram(data?.diagramXml)
-            setSelectionContext("")
+            clearSelectionContext()
             if (data) {
                 // Mark all message IDs as loaded from session
                 const messageIds = (data.messages as any[]).map(
@@ -568,7 +569,7 @@ export default function ChatPanel({
             onDisplayChart,
             clearDiagram,
             setDiagramHistory,
-            setSelectionContext,
+            clearSelectionContext,
         ],
     )
 
@@ -1083,9 +1084,10 @@ export default function ChatPanel({
                     previousXml,
                     sessionId,
                     customSystemMessage,
-                    ...(selectionContext.trim() && {
-                        selectionContext: selectionContext.trim(),
-                    }),
+                    ...(selectionContextEnabled &&
+                        selectionContext.trim() && {
+                            selectionContext: selectionContext.trim(),
+                        }),
                 },
                 headers: {
                     "x-access-code": config.accessCode,
