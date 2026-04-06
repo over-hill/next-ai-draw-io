@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/resizable"
 import { useDiagram } from "@/contexts/diagram-context"
 import { getAssetUrl } from "@/lib/base-path"
+import { executeEditorCommand } from "@/lib/editor-command-routing"
 import { i18n, type Locale } from "@/lib/i18n/config"
 import { isIndexedDBUsable } from "@/lib/session-storage"
 
@@ -436,6 +437,21 @@ export default function Home() {
         return () =>
             window.removeEventListener("message", handleSelectionMessage)
     }, [setAutoSelectionContext])
+
+    useEffect(() => {
+        const removeListener = window.electronAPI?.onEditorCommand?.(
+            (command) => {
+                executeEditorCommand(command, {
+                    document,
+                    iframe: getDrawioIframe(),
+                })
+            },
+        )
+
+        return () => {
+            removeListener?.()
+        }
+    }, [])
 
     useEffect(() => {
         if (!isDrawioReady) {

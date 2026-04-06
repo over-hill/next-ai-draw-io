@@ -63,7 +63,10 @@
         "selectionContextDescription": "可选的目标提示，会随本次对话一起发送。你可以粘贴要修改对象的 ID、标签，或一段 XML 片段。",
         "selectionContextPlaceholder": "例如：node id=payment-service，label=支付服务，或粘贴选中节点的 mxCell XML...",
         "selectionContextTooltip": "添加选中上下文",
-        "selectionContextAttached": "已附加选中上下文"
+        "selectionContextAttached": "已附加选中上下文",
+        "diagramPreset": "图表模板",
+        "diagramPresetOptional": "不使用模板",
+        "diagramPresetNone": "不使用模板"
     },
     "examples": {
         "title": "用 AI 创建图表",
@@ -139,7 +142,9 @@
         "panelVisibilityDescription": "选择在聊天大厅显示哪些面板。",
         "showRecentChats": "最近聊天",
         "showMyTemplates": "我的模板",
-        "showQuickExamples": "快速示例"
+        "showQuickExamples": "快速示例",
+        "diagramPresets": "图表模板",
+        "diagramPresetsDescription": "管理可复用的生成约束，并在发送请求前选择是否启用。"
     },
     "save": {
         "title": "保存图表",
@@ -166,7 +171,11 @@
         "clearTitle": "清除所有内容？",
         "clearDescription": "这将清除当前对话并重置图表。此操作无法撤消。",
         "clearEverything": "清除所有内容",
-        "clearSuccess": "已开始新对话"
+        "clearSuccess": "已开始新对话",
+        "newChatChoiceTitle": "开始新对话",
+        "newChatChoiceDescription": "你可以先导入已保存的图文件，也可以直接从空白画布开始。",
+        "newChatChoiceImport": "导入图文件",
+        "newChatChoiceBlank": "直接新建"
     },
     "errors": {
         "maxFiles": "文件太多。最多允许 {max} 个。",
@@ -186,6 +195,7 @@
         "failedToSave": "无法保存消息到 localStorage",
         "failedToRestore": "无法从 localStorage 恢复",
         "failedToPersist": "卸载前无法持久化状态",
+        "failedToImportDiagram": "导入图文件失败，请检查文件格式。",
         "failedToExport": "获取图表数据时出错",
         "failedToLoadExample": "加载示例图片时出错",
         "failedToRecordFeedback": "记录您的反馈失败。请重试。",
@@ -407,5 +417,32 @@
         "allModelsShown": "显示所有模型（包括未验证的）",
         "unvalidatedModelWarning": "此模型尚未验证",
         "serverDefaultModel": "服务器默认模型"
+    },
+    "diagramPresets": {
+        "managerTitle": "图表模板",
+        "managerDescription": "为架构图、云架构图和其他固定风格创建可选的生成约束。",
+        "available": "可用模板",
+        "availableDescription": "内置模板始终可用；自定义模板可以在这里编辑。",
+        "builtIn": "内置",
+        "custom": "自定义",
+        "active": "当前使用",
+        "usePreset": "使用",
+        "clearSelection": "清除",
+        "builtInReadonly": "内置模板不可编辑",
+        "emptyCustom": "还没有自定义模板。创建一个来保存你自己的架构图风格规则。",
+        "create": "新建模板",
+        "edit": "编辑模板",
+        "delete": "删除模板",
+        "formDescription": "填写模板标题、可选描述，以及用于约束生成结果的指令。",
+        "detailsTitle": "模板详情",
+        "detailsDescription": "点击左侧模板可查看完整约束，再决定是否启用或编辑。",
+        "detailsEmpty": "选择一个模板以查看它的标题、说明和生成约束。",
+        "enabled": "已启用",
+        "disabled": "已停用",
+        "title": "标题",
+        "description": "描述",
+        "instructions": "指令",
+        "titleRequired": "请输入模板标题。",
+        "instructionsRequired": "请输入模板指令。"
     }
 }

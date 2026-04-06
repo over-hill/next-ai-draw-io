@@ -24,6 +24,7 @@ import {
     replaceHistoricalToolInputs,
     validateFileParts,
 } from "@/lib/chat-helpers"
+import { buildDiagramPresetSystemSection } from "@/lib/diagram-presets"
 import {
     checkAndIncrementRequest,
     isQuotaEnabled,
@@ -100,6 +101,22 @@ async function handleChatRequest(req: Request): Promise<Response> {
         typeof body.selectionContext === "string"
             ? body.selectionContext.slice(0, 8000).trim()
             : ""
+    const diagramPreset =
+        body.diagramPreset &&
+        typeof body.diagramPreset === "object" &&
+        typeof body.diagramPreset.title === "string" &&
+        typeof body.diagramPreset.instructions === "string"
+            ? {
+                  title: body.diagramPreset.title.slice(0, 120).trim(),
+                  description:
+                      typeof body.diagramPreset.description === "string"
+                          ? body.diagramPreset.description.slice(0, 300).trim()
+                          : undefined,
+                  instructions: body.diagramPreset.instructions
+                      .slice(0, 4000)
+                      .trim(),
+              }
+            : null
 
     // Get user ID for Langfuse tracking and quota
     const userId = getUserIdFromRequest(req)
@@ -261,9 +278,21 @@ async function handleChatRequest(req: Request): Promise<Response> {
 
     // Get the appropriate system prompt based on model (extended for Opus/Haiku 4.5)
     const systemMessage = getSystemPrompt(modelId, minimalStyle)
-    const finalSystemMessage = customSystemMessage
-        ? `${systemMessage}\n\n## Custom Instructions\n${customSystemMessage}`
-        : systemMessage
+    const diagramPresetSystemSection =
+        buildDiagramPresetSystemSection(diagramPreset)
+    const finalSystemMessageParts = [systemMessage]
+
+    if (customSystemMessage) {
+        finalSystemMessageParts.push(
+            `## Custom Instructions\n${customSystemMessage}`,
+        )
+    }
+
+    if (diagramPresetSystemSection) {
+        finalSystemMessageParts.push(diagramPresetSystemSection)
+    }
+
+    const finalSystemMessage = finalSystemMessageParts.join("\n\n")
 
     // Extract file parts (images) from the last user message
     const fileParts =

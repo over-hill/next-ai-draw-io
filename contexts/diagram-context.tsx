@@ -14,7 +14,7 @@ import { toast } from "sonner"
 import type { ExportFormat } from "@/components/save-dialog"
 import { getApiEndpoint } from "@/lib/base-path"
 import {
-    extractDiagramXML,
+    getDiagramXmlFromExportPayload,
     isRealDiagram,
     validateAndFixXml,
 } from "../lib/utils"
@@ -26,6 +26,11 @@ const EMPTY_DIAGRAM_XML = `<mxfile><diagram name="Page-1" id="page-1"><mxGraphMo
 interface DiagramAutoSaveData {
     xml?: string
     currentPage?: number
+}
+
+interface DiagramExportData {
+    data: string
+    xml?: string
 }
 
 interface DiagramContextType {
@@ -157,7 +162,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
 
     // Track if we're expecting an export for file save (stores raw export data)
     const saveResolverRef = useRef<{
-        resolver: ((data: string) => void) | null
+        resolver: ((data: DiagramExportData) => void) | null
         format: ExportFormat | null
     }>({ resolver: null, format: null })
 
@@ -266,6 +271,9 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
+        // This XML is already being applied to the live editor below, so
+        // the restoration effect must not load it a second time.
+        lastRestoredXmlRef.current = xmlToLoad
         // Keep chartXML in sync even when diagrams are injected (e.g., display_diagram tool)
         setChartXML(xmlToLoad)
 
@@ -278,7 +286,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         return null
     }
 
-    const handleDiagramExport = (data: any) => {
+    const handleDiagramExport = (data: DiagramExportData) => {
         // Handle PNG export for VLM validation
         if (pngResolverRef.current && data.data?.startsWith("data:image/png")) {
             pngResolverRef.current(data.data)
@@ -289,7 +297,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         // Handle save to file if requested (process raw data before extraction)
         if (saveResolverRef.current.resolver) {
             const format = saveResolverRef.current.format
-            saveResolverRef.current.resolver(data.data)
+            saveResolverRef.current.resolver(data)
             saveResolverRef.current = { resolver: null, format: null }
             // For non-xmlsvg formats, skip XML extraction as it will fail
             // Only drawio (which uses xmlsvg internally) has the content attribute
@@ -299,7 +307,10 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
-        const extractedXML = extractDiagramXML(data.data)
+        const extractedXML = getDiagramXmlFromExportPayload(data)
+        // Exported XML reflects the editor's current state, so avoid reloading
+        // the same content via the restoration effect.
+        lastRestoredXmlRef.current = extractedXML
         setChartXML(extractedXML)
         setLatestSvg(data.data)
 
@@ -354,6 +365,10 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         if (!isDrawioReady && isRealDiagram(chartXML)) {
             return
         }
+        // Autosave data comes from the current editor state. Recording it here
+        // prevents the chartXML restoration effect from reloading the iframe
+        // and clearing draw.io's undo history.
+        lastRestoredXmlRef.current = data.xml
         setChartXML(data.xml)
     }
 
@@ -382,14 +397,13 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
 
         // Set up the resolver before triggering export
         saveResolverRef.current = {
-            resolver: (exportData: string) => {
+            resolver: (exportData: DiagramExportData) => {
                 let fileContent: string | Blob
                 let mimeType: string
                 let extension: string
 
                 if (format === "drawio") {
-                    // Extract XML from SVG for .drawio format
-                    const xml = extractDiagramXML(exportData)
+                    const xml = getDiagramXmlFromExportPayload(exportData)
                     let xmlContent = xml
                     if (!xml.includes("<mxfile")) {
                         xmlContent = `<mxfile><diagram name="Page-1" id="page-1">${xml}</diagram></mxfile>`
@@ -399,17 +413,17 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
                     extension = ".drawio"
                 } else if (format === "png") {
                     // PNG data comes as base64 data URL
-                    fileContent = exportData
+                    fileContent = exportData.data
                     mimeType = "image/png"
                     extension = ".png"
                 } else if (format === "xmlsvg") {
                     // Editable SVG: pass data URL directly (like PNG)
-                    fileContent = exportData
+                    fileContent = exportData.data
                     mimeType = "image/svg+xml"
                     extension = ".drawio.svg"
                 } else {
                     // SVG format (view-only)
-                    fileContent = exportData
+                    fileContent = exportData.data
                     mimeType = "image/svg+xml"
                     extension = ".svg"
                 }

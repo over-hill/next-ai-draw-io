@@ -4,6 +4,7 @@ import { ChevronRight, Github, Info, Moon, Sun, Tag } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
+import { DiagramPresetManager } from "@/components/diagram-preset-manager"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -25,6 +26,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { useDictionary } from "@/hooks/use-dictionary"
 import { getApiEndpoint } from "@/lib/base-path"
+import type { DiagramPreset, DiagramPresetInput } from "@/lib/diagram-presets"
 import { i18n, type Locale } from "@/lib/i18n/config"
 import { STORAGE_KEYS } from "@/lib/storage"
 
@@ -74,6 +76,13 @@ interface SettingsDialogProps {
     onOpenModelConfig?: () => void
     customSystemMessage?: string
     onCustomSystemMessageChange?: (value: string) => void
+    diagramPresets?: DiagramPreset[]
+    onCreateDiagramPreset?: (input: DiagramPresetInput) => void
+    onUpdateDiagramPreset?: (
+        presetId: string,
+        input: DiagramPresetInput,
+    ) => void
+    onDeleteDiagramPreset?: (presetId: string) => void
 }
 
 export const STORAGE_ACCESS_CODE_KEY = "next-ai-draw-io-access-code"
@@ -100,6 +109,10 @@ function SettingsContent({
     onOpenModelConfig,
     customSystemMessage = "",
     onCustomSystemMessageChange = () => {},
+    diagramPresets = [],
+    onCreateDiagramPreset = () => {},
+    onUpdateDiagramPreset = () => {},
+    onDeleteDiagramPreset = () => {},
 }: SettingsDialogProps) {
     const dict = useDictionary()
     const router = useRouter()
@@ -113,6 +126,8 @@ function SettingsContent({
     )
     const [currentLang, setCurrentLang] = useState("en")
     const [sendShortcut, setSendShortcut] = useState("ctrl-enter")
+    const [showDiagramPresetManager, setShowDiagramPresetManager] =
+        useState(false)
 
     // Panel visibility state
     const [showRecentChats, setShowRecentChats] = useState(true)
@@ -571,6 +586,21 @@ function SettingsContent({
                         />
                     </div>
 
+                    <SettingItem
+                        label={dict.settings.diagramPresets}
+                        description={dict.settings.diagramPresetsDescription}
+                    >
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 w-9 p-0"
+                            onClick={() => setShowDiagramPresetManager(true)}
+                            aria-label={dict.settings.diagramPresets}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </SettingItem>
+
                     {/* Send Shortcut */}
                     <SettingItem
                         label={dict.settings.sendShortcut}
@@ -657,6 +687,15 @@ function SettingsContent({
                         )}
                 </div>
             </div>
+
+            <DiagramPresetManager
+                open={showDiagramPresetManager}
+                onOpenChange={setShowDiagramPresetManager}
+                presets={diagramPresets}
+                onCreatePreset={onCreateDiagramPreset}
+                onUpdatePreset={onUpdateDiagramPreset}
+                onDeletePreset={onDeleteDiagramPreset}
+            />
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-border-subtle bg-surface-1/50 rounded-b-2xl">

@@ -63,7 +63,10 @@
         "selectionContextDescription": "可選的目標提示，會隨本次對話一起送出。你可以貼上要修改物件的 ID、標籤，或一段 XML 片段。",
         "selectionContextPlaceholder": "例如：node id=payment-service，label=支付服務，或貼上選取節點的 mxCell XML...",
         "selectionContextTooltip": "加入選取上下文",
-        "selectionContextAttached": "已附加選取上下文"
+        "selectionContextAttached": "已附加選取上下文",
+        "diagramPreset": "圖表模板",
+        "diagramPresetOptional": "不使用模板",
+        "diagramPresetNone": "不使用模板"
     },
     "examples": {
         "title": "用 AI 建立圖表",
@@ -139,7 +142,9 @@
         "panelVisibilityDescription": "選擇在聊天大廳顯示哪些面板。",
         "showRecentChats": "最近聊天",
         "showMyTemplates": "我的範本",
-        "showQuickExamples": "快速範例"
+        "showQuickExamples": "快速範例",
+        "diagramPresets": "圖表模板",
+        "diagramPresetsDescription": "管理可重用的生成約束，並在送出請求前選擇是否啟用。"
     },
     "save": {
         "title": "儲存圖表",
@@ -166,7 +171,11 @@
         "clearTitle": "清除所有內容？",
         "clearDescription": "這將清除目前對話並重設圖表。此操作無法復原。",
         "clearEverything": "清除所有內容",
-        "clearSuccess": "已開始新對話"
+        "clearSuccess": "已開始新對話",
+        "newChatChoiceTitle": "開始新對話",
+        "newChatChoiceDescription": "你可以先匯入已儲存的圖檔，也可以直接從空白畫布開始。",
+        "newChatChoiceImport": "匯入圖檔",
+        "newChatChoiceBlank": "直接新建"
     },
     "errors": {
         "maxFiles": "檔案太多。最多允許 {max} 個。",
@@ -186,6 +195,7 @@
         "failedToSave": "無法儲存訊息到 localStorage",
         "failedToRestore": "無法從 localStorage 還原",
         "failedToPersist": "卸載前無法持久化狀態",
+        "failedToImportDiagram": "匯入圖檔失敗，請檢查檔案格式。",
         "failedToExport": "取得圖表資料時出錯",
         "failedToLoadExample": "載入範例圖片時出錯",
         "failedToRecordFeedback": "記錄您的回饋失敗。請重試。",
@@ -407,5 +417,32 @@
         "allModelsShown": "顯示所有模型（包括未驗證的）",
         "unvalidatedModelWarning": "此模型尚未驗證",
         "serverDefaultModel": "伺服器預設模型"
+    },
+    "diagramPresets": {
+        "managerTitle": "圖表模板",
+        "managerDescription": "為架構圖、雲架構圖和其他固定風格建立可選的生成約束。",
+        "available": "可用模板",
+        "availableDescription": "內建模板始終可用；自訂模板可以在這裡編輯。",
+        "builtIn": "內建",
+        "custom": "自訂",
+        "active": "目前使用",
+        "usePreset": "使用",
+        "clearSelection": "清除",
+        "builtInReadonly": "內建模板不可編輯",
+        "emptyCustom": "還沒有自訂模板。建立一個來保存你自己的架構圖風格規則。",
+        "create": "新增模板",
+        "edit": "編輯模板",
+        "delete": "刪除模板",
+        "formDescription": "填寫模板標題、可選描述，以及用於約束生成結果的指令。",
+        "detailsTitle": "模板詳情",
+        "detailsDescription": "點擊左側模板可查看完整約束，再決定是否啟用或編輯。",
+        "detailsEmpty": "選擇一個模板以查看它的標題、說明和生成約束。",
+        "enabled": "已啟用",
+        "disabled": "已停用",
+        "title": "標題",
+        "description": "描述",
+        "instructions": "指令",
+        "titleRequired": "請輸入模板標題。",
+        "instructionsRequired": "請輸入模板指令。"
     }
 }

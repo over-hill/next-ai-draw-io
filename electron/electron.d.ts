@@ -31,6 +31,8 @@ interface ProxyConfig {
     httpsProxy?: string
 }
 
+type EditorCommand = "undo" | "redo"
+
 /** Result of setting proxy */
 interface SetProxyResult {
     success: boolean
@@ -74,6 +76,10 @@ declare global {
             >
             /** Set user's preferred locale */
             setUserLocale: (locale: string) => Promise<SetUserLocaleResult>
+            /** Listen for undo/redo commands from the Electron menu */
+            onEditorCommand: (
+                callback: (command: EditorCommand) => void,
+            ) => () => void
         }
 
         /** Settings window Electron API */

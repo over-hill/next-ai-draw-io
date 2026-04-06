@@ -9,6 +9,44 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
 }
 
+interface DiagramExportPayload {
+    xml?: string
+    data?: string
+}
+
+interface ResolveDiagramXmlForRequestOptions {
+    currentXml?: string | null
+    exportDiagramXml: () => Promise<string>
+}
+
+export async function resolveDiagramXmlForRequest({
+    currentXml,
+    exportDiagramXml,
+}: ResolveDiagramXmlForRequestOptions): Promise<string> {
+    const trimmedCurrentXml = currentXml?.trim()
+    if (trimmedCurrentXml) {
+        return trimmedCurrentXml
+    }
+
+    return exportDiagramXml()
+}
+
+export function getDiagramXmlFromExportPayload(
+    payload: DiagramExportPayload,
+    extractDiagramXml: (xmlSvgString: string) => string = extractDiagramXML,
+): string {
+    const directXml = payload.xml?.trim()
+    if (directXml) {
+        return directXml
+    }
+
+    if (typeof payload.data === "string" && payload.data.length > 0) {
+        return extractDiagramXml(payload.data)
+    }
+
+    throw new Error("Export payload does not contain diagram XML.")
+}
+
 // ============================================================================
 // Diagram Constants
 // ============================================================================
@@ -326,7 +364,7 @@ export function convertToLegalXml(xmlString: string): string {
 export function wrapWithMxFile(xml: string): string {
     const ROOT_CELLS = '<mxCell id="0"/><mxCell id="1" parent="0"/>'
 
-    if (!xml || !xml.trim()) {
+    if (!xml?.trim()) {
         return `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root>${ROOT_CELLS}</root></mxGraphModel></diagram></mxfile>`
     }
 

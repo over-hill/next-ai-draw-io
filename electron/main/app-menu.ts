@@ -15,6 +15,46 @@ import {
 import { getMenuTranslations, getPreferredLocale } from "./menu-i18n"
 import { restartNextServer } from "./next-server"
 import { showSettingsWindow } from "./settings-window"
+import { getMainWindow } from "./window-manager"
+
+type EditorCommand = "undo" | "redo"
+
+function dispatchEditorCommand(command: EditorCommand): void {
+    const win = BrowserWindow.getFocusedWindow()
+    if (!win || win.isDestroyed()) {
+        return
+    }
+
+    if (win === getMainWindow()) {
+        win.webContents.send("editor-command", command)
+        return
+    }
+
+    if (command === "undo") {
+        win.webContents.undo()
+        return
+    }
+
+    win.webContents.redo()
+}
+
+function getRedoAccelerator(isMac: boolean): string {
+    return isMac ? "Shift+Cmd+Z" : "Ctrl+Y"
+}
+
+function buildEditorCommandItem(
+    label: string,
+    accelerator: string,
+    command: EditorCommand,
+): MenuItemConstructorOptions {
+    return {
+        label,
+        accelerator,
+        click: () => {
+            dispatchEditorCommand(command)
+        },
+    }
+}
 
 /**
  * Build and set the application menu with i18n support
@@ -96,8 +136,8 @@ function getMenuTemplate(): MenuItemConstructorOptions[] {
     template.push({
         label: t.edit,
         submenu: [
-            { role: "undo" }, // System-translated
-            { role: "redo" }, // System-translated
+            buildEditorCommandItem(t.undo, "CmdOrCtrl+Z", "undo"),
+            buildEditorCommandItem(t.redo, getRedoAccelerator(isMac), "redo"),
             { type: "separator" },
             { role: "cut" }, // System-translated
             { role: "copy" }, // System-translated

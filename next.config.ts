@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
     outputFileTracingIncludes: {
         "*": ["./instrumentation.ts"],
     },
+    outputFileTracingExcludes: {
+        "*": ["./release/**/*"],
+    },
 }
 
 export default nextConfig

@@ -16,6 +16,8 @@ export interface MenuTranslations {
 
     // Edit menu
     edit: string
+    undo: string
+    redo: string
 
     // View menu
     view: string
@@ -45,6 +47,8 @@ const translations: Record<MenuLocale, MenuTranslations> = {
 
         // Edit menu
         edit: "Edit",
+        undo: "Undo",
+        redo: "Redo",
 
         // View menu
         view: "View",
@@ -73,6 +77,8 @@ const translations: Record<MenuLocale, MenuTranslations> = {
 
         // Edit menu
         edit: "编辑",
+        undo: "\u64a4\u9500",
+        redo: "\u91cd\u505a",
 
         // View menu
         view: "查看",
@@ -101,6 +107,8 @@ const translations: Record<MenuLocale, MenuTranslations> = {
 
         // Edit menu
         edit: "編集",
+        undo: "\u5143\u306b\u623b\u3059",
+        redo: "\u3084\u308a\u76f4\u3057",
 
         // View menu
         view: "表示",
@@ -129,6 +137,8 @@ const translations: Record<MenuLocale, MenuTranslations> = {
 
         // Edit menu
         edit: "編輯",
+        undo: "\u5fa9\u539f",
+        redo: "\u91cd\u505a",
 
         // View menu
         view: "檢視",

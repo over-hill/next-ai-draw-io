@@ -31,6 +31,10 @@ export const STORAGE_KEYS = {
     // Custom system message
     customSystemMessage: "next-ai-draw-io-custom-system-message",
 
+    // Diagram presets
+    diagramPresets: "next-ai-draw-io-diagram-presets",
+    selectedDiagramPresetId: "next-ai-draw-io-selected-diagram-preset-id",
+
     // Panel visibility
     showRecentChats: "next-ai-draw-io-show-recent-chats",
     showMyTemplates: "next-ai-draw-io-show-my-templates",

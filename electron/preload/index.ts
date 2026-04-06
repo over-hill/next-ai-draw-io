@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron"
 
+type EditorCommand = "undo" | "redo"
+
 /**
  * Expose safe APIs to the renderer process
  */
@@ -31,4 +33,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getUserLocale: () => ipcRenderer.invoke("get-user-locale"),
     setUserLocale: (locale: string) =>
         ipcRenderer.invoke("set-user-locale", locale),
+
+    // Editor command bridge for embedded draw.io
+    onEditorCommand: (callback: (command: EditorCommand) => void) => {
+        const listener = (
+            _event: Electron.IpcRendererEvent,
+            command: unknown,
+        ) => {
+            if (command === "undo" || command === "redo") {
+                callback(command)
+            }
+        }
+
+        ipcRenderer.on("editor-command", listener)
+
+        return () => {
+            ipcRenderer.removeListener("editor-command", listener)
+        }
+    },
 })

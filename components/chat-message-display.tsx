@@ -37,7 +37,12 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useDictionary } from "@/hooks/use-dictionary"
 import { getApiEndpoint } from "@/lib/base-path"
 import {
-    applyDiagramOperations,
+    getStreamingDiagramPreviewPolicy,
+    shouldRenderStreamingTextAsMarkdown,
+    shouldShowPendingAssistantPlaceholder,
+} from "@/lib/chat-streaming-performance"
+import { getDiagramPreviewWorkerClient } from "@/lib/diagram-preview-worker-client"
+import {
     convertToLegalXml,
     extractCompleteMxCells,
     replaceNodes,
@@ -195,6 +200,11 @@ export function ChatMessageDisplay({
     const processedToolCalls = processedToolCallsRef
     // Track the last processed XML per toolCallId to skip redundant processing during streaming
     const lastProcessedXmlRef = useRef<Map<string, string>>(new Map())
+    const displayPreviewSequenceRef = useRef<Map<string, number>>(new Map())
+    const editPreviewSequenceRef = useRef<Map<string, number>>(new Map())
+    const diagramPreviewWorkerClientRef = useRef(
+        getDiagramPreviewWorkerClient(),
+    )
 
     // Reset refs when messages become empty (new chat or session switch)
     // This ensures cached examples work correctly after starting a new session
@@ -202,6 +212,8 @@ export function ChatMessageDisplay({
         if (messages.length === 0) {
             previousXML.current = ""
             lastProcessedXmlRef.current.clear()
+            displayPreviewSequenceRef.current.clear()
+            editPreviewSequenceRef.current.clear()
             // Note: processedToolCalls is passed from parent, so we clear it too
             processedToolCalls.current.clear()
             // Scroll to top to show newest history items
@@ -213,7 +225,6 @@ export function ChatMessageDisplay({
     const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null,
     )
-    const STREAMING_DEBOUNCE_MS = 150 // Only update diagram every 150ms during streaming
     // Refs for edit_diagram streaming
     const pendingEditRef = useRef<{
         operations: DiagramOperation[]
@@ -415,6 +426,15 @@ export function ChatMessageDisplay({
         [chartXML, onDisplayChart],
     )
 
+    const nextPreviewSequence = useCallback(
+        (map: MutableRefObject<Map<string, number>>, toolCallId: string) => {
+            const next = (map.current.get(toolCallId) || 0) + 1
+            map.current.set(toolCallId, next)
+            return next
+        },
+        [],
+    )
+
     // Track previous message count to detect bulk loads vs streaming
     const prevMessageCountRef = useRef(0)
 
@@ -470,6 +490,11 @@ export function ChatMessageDisplay({
                             input?.xml
                         ) {
                             const xml = input.xml as string
+                            const previewPolicy =
+                                getStreamingDiagramPreviewPolicy({
+                                    toolName: "display_diagram",
+                                    xmlLength: xml.length,
+                                })
 
                             // Skip if XML hasn't changed since last processing
                             const lastXml =
@@ -482,6 +507,19 @@ export function ChatMessageDisplay({
                                 state === "input-streaming" ||
                                 state === "input-available"
                             ) {
+                                if (!previewPolicy.shouldPreview) {
+                                    nextPreviewSequence(
+                                        displayPreviewSequenceRef,
+                                        toolCallId,
+                                    )
+                                    if (debounceTimeoutRef.current) {
+                                        clearTimeout(debounceTimeoutRef.current)
+                                        debounceTimeoutRef.current = null
+                                    }
+                                    pendingXmlRef.current = null
+                                    return
+                                }
+
                                 // Debounce streaming updates - queue the XML and process after delay
                                 pendingXmlRef.current = xml
 
@@ -494,23 +532,62 @@ export function ChatMessageDisplay({
                                             debounceTimeoutRef.current = null
                                             pendingXmlRef.current = null
                                             if (pendingXml) {
-                                                handleDisplayChart(
-                                                    pendingXml,
-                                                    false,
-                                                )
-                                                lastProcessedXmlRef.current.set(
-                                                    toolCallId,
-                                                    pendingXml,
-                                                )
+                                                const sequence =
+                                                    nextPreviewSequence(
+                                                        displayPreviewSequenceRef,
+                                                        toolCallId,
+                                                    )
+                                                void diagramPreviewWorkerClientRef.current
+                                                    .processDisplayPreview({
+                                                        xml: pendingXml,
+                                                        baseXml: chartXML,
+                                                    })
+                                                    .then((result) => {
+                                                        if (!result) {
+                                                            return
+                                                        }
+
+                                                        if (
+                                                            displayPreviewSequenceRef.current.get(
+                                                                toolCallId,
+                                                            ) !== sequence
+                                                        ) {
+                                                            return
+                                                        }
+
+                                                        previousXML.current =
+                                                            result.convertedXml
+                                                        onDisplayChart(
+                                                            result.replacedXml,
+                                                            true,
+                                                        )
+                                                        lastProcessedXmlRef.current.set(
+                                                            toolCallId,
+                                                            pendingXml,
+                                                        )
+                                                    })
+                                                    .catch((error) => {
+                                                        console.warn(
+                                                            "[display_diagram streaming] Worker preview failed:",
+                                                            error instanceof
+                                                                Error
+                                                                ? error.message
+                                                                : error,
+                                                        )
+                                                    })
                                             }
                                         },
-                                        STREAMING_DEBOUNCE_MS,
+                                        previewPolicy.debounceMs,
                                     )
                                 }
                             } else if (
                                 state === "output-available" &&
                                 !processedToolCalls.current.has(toolCallId)
                             ) {
+                                nextPreviewSequence(
+                                    displayPreviewSequenceRef,
+                                    toolCallId,
+                                )
                                 // Final output - process immediately (clear any pending debounce)
                                 if (debounceTimeoutRef.current) {
                                     clearTimeout(debounceTimeoutRef.current)
@@ -571,6 +648,27 @@ export function ChatMessageDisplay({
                                 state === "input-streaming" ||
                                 state === "input-available"
                             ) {
+                                const previewPolicy =
+                                    getStreamingDiagramPreviewPolicy({
+                                        toolName: "edit_diagram",
+                                        operationCount: completeOps.length,
+                                    })
+
+                                if (!previewPolicy.shouldPreview) {
+                                    nextPreviewSequence(
+                                        editPreviewSequenceRef,
+                                        toolCallId,
+                                    )
+                                    if (editDebounceTimeoutRef.current) {
+                                        clearTimeout(
+                                            editDebounceTimeoutRef.current,
+                                        )
+                                        editDebounceTimeoutRef.current = null
+                                    }
+                                    pendingEditRef.current = null
+                                    return
+                                }
+
                                 // Queue the operations for debounced processing
                                 pendingEditRef.current = {
                                     operations: completeOps,
@@ -593,42 +691,67 @@ export function ChatMessageDisplay({
                                                     )
                                                 if (!origXml) return
 
-                                                try {
-                                                    const {
-                                                        result: editedXml,
-                                                    } = applyDiagramOperations(
-                                                        origXml,
-                                                        pending.operations,
+                                                const sequence =
+                                                    nextPreviewSequence(
+                                                        editPreviewSequenceRef,
+                                                        pending.toolCallId,
                                                     )
-                                                    handleDisplayChart(
-                                                        editedXml,
-                                                        false,
+
+                                                void diagramPreviewWorkerClientRef.current
+                                                    .processEditPreview({
+                                                        originalXml: origXml,
+                                                        operations:
+                                                            pending.operations,
+                                                    })
+                                                    .then(
+                                                        ({
+                                                            result: editedXml,
+                                                        }) => {
+                                                            if (
+                                                                editPreviewSequenceRef.current.get(
+                                                                    pending.toolCallId,
+                                                                ) !== sequence
+                                                            ) {
+                                                                return
+                                                            }
+
+                                                            onDisplayChart(
+                                                                editedXml,
+                                                                true,
+                                                            )
+                                                            lastProcessedXmlRef.current.set(
+                                                                pending.toolCallId +
+                                                                    "-opCount",
+                                                                String(
+                                                                    pending
+                                                                        .operations
+                                                                        .length,
+                                                                ),
+                                                            )
+                                                        },
                                                     )
-                                                    lastProcessedXmlRef.current.set(
-                                                        pending.toolCallId +
-                                                            "-opCount",
-                                                        String(
-                                                            pending.operations
-                                                                .length,
-                                                        ),
-                                                    )
-                                                } catch (e) {
-                                                    console.warn(
-                                                        `[edit_diagram streaming] Operation failed:`,
-                                                        e instanceof Error
-                                                            ? e.message
-                                                            : e,
-                                                    )
-                                                }
+                                                    .catch((error) => {
+                                                        console.warn(
+                                                            "[edit_diagram streaming] Worker preview failed:",
+                                                            error instanceof
+                                                                Error
+                                                                ? error.message
+                                                                : error,
+                                                        )
+                                                    })
                                             }
                                         },
-                                        STREAMING_DEBOUNCE_MS,
+                                        previewPolicy.debounceMs,
                                     )
                                 }
                             } else if (
                                 state === "output-available" &&
                                 !processedToolCalls.current.has(toolCallId)
                             ) {
+                                nextPreviewSequence(
+                                    editPreviewSequenceRef,
+                                    toolCallId,
+                                )
                                 // Final state - cleanup streaming refs (tool handler does final application)
                                 if (editDebounceTimeoutRef.current) {
                                     clearTimeout(editDebounceTimeoutRef.current)
@@ -651,6 +774,12 @@ export function ChatMessageDisplay({
         // which would cancel the timeout before it fires.
         // Let the timeouts complete naturally - they're harmless if component unmounts.
     }, [messages, handleDisplayChart, chartXML])
+
+    const showPendingAssistantPlaceholder =
+        shouldShowPendingAssistantPlaceholder({
+            status,
+            messages,
+        })
 
     return (
         <ScrollArea className="h-full w-full scrollbar-thin">
@@ -1116,13 +1245,15 @@ export function ChatMessageDisplay({
                                                                         part.type ===
                                                                         "text"
                                                                     ) {
+                                                                        const textPart =
+                                                                            part as {
+                                                                                text: string
+                                                                                state?:
+                                                                                    | "streaming"
+                                                                                    | "done"
+                                                                            }
                                                                         const textContent =
-                                                                            (
-                                                                                part as {
-                                                                                    text: string
-                                                                                }
-                                                                            )
-                                                                                .text
+                                                                            textPart.text
                                                                         const sections =
                                                                             splitTextIntoFileSections(
                                                                                 textContent,
@@ -1233,6 +1364,21 @@ export function ChatMessageDisplay({
                                                                                             )
                                                                                         }
                                                                                         // Regular text section
+                                                                                        const shouldUseMarkdown =
+                                                                                            shouldRenderStreamingTextAsMarkdown(
+                                                                                                {
+                                                                                                    status,
+                                                                                                    messageRole:
+                                                                                                        message.role as
+                                                                                                            | "user"
+                                                                                                            | "assistant"
+                                                                                                            | "system",
+                                                                                                    partState:
+                                                                                                        textPart.state,
+                                                                                                    isLastAssistantMessage,
+                                                                                                },
+                                                                                            )
+
                                                                                         return (
                                                                                             <div
                                                                                                 key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
@@ -1243,11 +1389,19 @@ export function ChatMessageDisplay({
                                                                                                         : "dark:prose-invert"
                                                                                                 }`}
                                                                                             >
-                                                                                                <ReactMarkdown>
-                                                                                                    {
-                                                                                                        section.content
-                                                                                                    }
-                                                                                                </ReactMarkdown>
+                                                                                                {shouldUseMarkdown ? (
+                                                                                                    <ReactMarkdown>
+                                                                                                        {
+                                                                                                            section.content
+                                                                                                        }
+                                                                                                    </ReactMarkdown>
+                                                                                                ) : (
+                                                                                                    <div className="whitespace-pre-wrap break-words">
+                                                                                                        {
+                                                                                                            section.content
+                                                                                                        }
+                                                                                                    </div>
+                                                                                                )}
                                                                                             </div>
                                                                                         )
                                                                                     },
@@ -1401,6 +1555,17 @@ export function ChatMessageDisplay({
                             </div>
                         )
                     })}
+                    {showPendingAssistantPlaceholder && (
+                        <div className="flex w-full justify-start animate-message-in">
+                            <div className="max-w-[85%] min-w-0">
+                                <div className="px-4 py-3 text-sm leading-relaxed bg-muted/60 text-foreground rounded-2xl rounded-bl-md">
+                                    <div className="whitespace-pre-wrap break-words text-foreground/80">
+                                        {dict.reasoning.thinking}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
             <div ref={messagesEndRef} />

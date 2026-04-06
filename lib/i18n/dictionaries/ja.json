@@ -63,7 +63,10 @@
         "selectionContextDescription": "任意の対象ヒントで、この会話リクエストと一緒に送信されます。変更したい要素の ID、ラベル、または XML 断片を貼り付けてください。",
         "selectionContextPlaceholder": "例: node id=payment-service、label=Payment Service、または選択した mxCell XML を貼り付け...",
         "selectionContextTooltip": "選択コンテキストを追加",
-        "selectionContextAttached": "選択コンテキストを追加済み"
+        "selectionContextAttached": "選択コンテキストを追加済み",
+        "diagramPreset": "図表テンプレート",
+        "diagramPresetOptional": "テンプレートなし",
+        "diagramPresetNone": "テンプレートなし"
     },
     "examples": {
         "title": "AI でダイアグラムを作成",
@@ -139,7 +142,9 @@
         "panelVisibilityDescription": "チャットロビーに表示するパネルを選択します。",
         "showRecentChats": "最近のチャット",
         "showMyTemplates": "マイテンプレート",
-        "showQuickExamples": "クイック例"
+        "showQuickExamples": "クイック例",
+        "diagramPresets": "図表テンプレート",
+        "diagramPresetsDescription": "再利用可能な生成制約を管理し、送信前に使うかどうかを選択します。"
     },
     "save": {
         "title": "ダイアグラムを保存",
@@ -166,7 +171,11 @@
         "clearTitle": "すべてクリアしますか？",
         "clearDescription": "現在の会話をクリアし、ダイアグラムをリセットします。この操作は元に戻せません。",
         "clearEverything": "すべてクリア",
-        "clearSuccess": "新しいチャットを開始しました"
+        "clearSuccess": "新しいチャットを開始しました",
+        "newChatChoiceTitle": "新しいチャットを開始",
+        "newChatChoiceDescription": "保存済みの図を読み込んで新しいチャットを始めるか、空白のキャンバスから開始できます。",
+        "newChatChoiceImport": "図をインポート",
+        "newChatChoiceBlank": "空白で開始"
     },
     "errors": {
         "maxFiles": "ファイルが多すぎます。最大 {max} 個まで許可されています。",
@@ -186,6 +195,7 @@
         "failedToSave": "localStorage へのメッセージの保存に失敗しました",
         "failedToRestore": "localStorage からの復元に失敗しました",
         "failedToPersist": "アンロード前の状態の永続化に失敗しました",
+        "failedToImportDiagram": "図のインポートに失敗しました。ファイル形式を確認してください。",
         "failedToExport": "チャートデータの取得エラー",
         "failedToLoadExample": "例の画像の読み込みエラー",
         "failedToRecordFeedback": "フィードバックの記録に失敗しました。もう一度お試しください。",
@@ -407,5 +417,32 @@
         "importNoFile": "JSON ファイルを選択してください",
         "importFailed": "インポートに失敗しました：{error}",
         "importSuccess": "{imported} 件インポート、{skipped} 件の重複をスキップしました"
+    },
+    "diagramPresets": {
+        "managerTitle": "図表テンプレート",
+        "managerDescription": "アーキテクチャ図やクラウド図など、繰り返し使うスタイル向けの生成制約を作成します。",
+        "available": "利用可能なテンプレート",
+        "availableDescription": "組み込みテンプレートは常に利用可能で、カスタムテンプレートはここで編集できます。",
+        "builtIn": "組み込み",
+        "custom": "カスタム",
+        "active": "使用中",
+        "usePreset": "使用",
+        "clearSelection": "解除",
+        "builtInReadonly": "組み込みテンプレートは編集できません",
+        "emptyCustom": "カスタムテンプレートはまだありません。自分の図表スタイルを保存するために作成してください。",
+        "create": "新規テンプレート",
+        "edit": "テンプレートを編集",
+        "delete": "テンプレートを削除",
+        "formDescription": "テンプレート名、任意の説明、生成を制約する指示を入力します。",
+        "detailsTitle": "テンプレート詳細",
+        "detailsDescription": "左側のテンプレートをクリックすると、使用や編集の前に制約内容を確認できます。",
+        "detailsEmpty": "テンプレートを選択すると、タイトル、説明、生成制約を確認できます。",
+        "enabled": "有効",
+        "disabled": "無効",
+        "title": "タイトル",
+        "description": "説明",
+        "instructions": "指示",
+        "titleRequired": "テンプレート名を入力してください。",
+        "instructionsRequired": "テンプレート指示を入力してください。"
     }
 }

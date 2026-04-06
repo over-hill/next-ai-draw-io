@@ -63,7 +63,10 @@
         "selectionContextDescription": "Optional target hint sent with your chat request. Paste an ID, label, or XML snippet for the object you want to change.",
         "selectionContextPlaceholder": "Example: node id=payment-service, label=Payment Service, or paste the selected mxCell XML...",
         "selectionContextTooltip": "Add selection context",
-        "selectionContextAttached": "Selection context attached"
+        "selectionContextAttached": "Selection context attached",
+        "diagramPreset": "Diagram template",
+        "diagramPresetOptional": "No template",
+        "diagramPresetNone": "No template"
     },
     "examples": {
         "title": "Create diagrams with AI",
@@ -135,6 +138,8 @@
         "customSystemMessage": "Custom System Message",
         "customSystemMessageDescription": "Add custom instructions appended to the AI's system prompt.",
         "customSystemMessagePlaceholder": "e.g., Always use blue color scheme for diagrams...",
+        "diagramPresets": "Diagram Templates",
+        "diagramPresetsDescription": "Manage reusable generation constraints and choose one before sending a request.",
         "panelVisibility": "Lobby Panels",
         "panelVisibilityDescription": "Choose which panels to show on the chat lobby.",
         "showRecentChats": "Recent Chats",
@@ -162,11 +167,42 @@
         "version": "Version",
         "restoreTo": "Restore to Version {version}?"
     },
+    "diagramPresets": {
+        "managerTitle": "Diagram Templates",
+        "managerDescription": "Create optional generation constraints for architecture diagrams, cloud diagrams, and other repeatable styles.",
+        "available": "Available templates",
+        "availableDescription": "Built-in templates are always available. Custom templates can be edited here.",
+        "builtIn": "Built-in",
+        "custom": "Custom",
+        "active": "Active",
+        "usePreset": "Use",
+        "clearSelection": "Clear",
+        "builtInReadonly": "Built-in templates are read-only",
+        "emptyCustom": "No custom templates yet. Create one to save your own architecture style rules.",
+        "create": "New template",
+        "edit": "Edit template",
+        "delete": "Delete template",
+        "formDescription": "Define the title, optional description, and the instructions that should constrain generation.",
+        "detailsTitle": "Template details",
+        "detailsDescription": "Click a template on the left to preview its full constraints before using or editing it.",
+        "detailsEmpty": "Select a template to preview its title, notes, and generation constraints.",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "title": "Title",
+        "description": "Description",
+        "instructions": "Instructions",
+        "titleRequired": "Please enter a template title.",
+        "instructionsRequired": "Please enter template instructions."
+    },
     "dialogs": {
         "clearTitle": "Clear Everything?",
         "clearDescription": "This will clear the current conversation and reset the diagram. This action cannot be undone.",
         "clearEverything": "Clear Everything",
-        "clearSuccess": "Started a fresh chat"
+        "clearSuccess": "Started a fresh chat",
+        "newChatChoiceTitle": "Start a new chat",
+        "newChatChoiceDescription": "Import a saved diagram into a fresh chat or start with a blank canvas.",
+        "newChatChoiceImport": "Import diagram",
+        "newChatChoiceBlank": "Start blank chat"
     },
     "errors": {
         "maxFiles": "Too many files. Maximum {max} allowed.",
@@ -186,6 +222,7 @@
         "failedToSave": "Failed to save messages to localStorage",
         "failedToRestore": "Failed to restore from localStorage",
         "failedToPersist": "Failed to persist state before unload",
+        "failedToImportDiagram": "Failed to import diagram. Please check the file format.",
         "failedToExport": "Error fetching chart data",
         "failedToLoadExample": "Error loading example image",
         "failedToRecordFeedback": "Failed to record your feedback. Please try again.",

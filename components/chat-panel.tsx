@@ -14,6 +14,7 @@ import {
     useCallback,
     useEffect,
     useLayoutEffect,
+    useMemo,
     useRef,
     useState,
 } from "react"
@@ -21,8 +22,11 @@ import { flushSync } from "react-dom"
 import { Toaster, toast } from "sonner"
 import { ButtonWithTooltip } from "@/components/button-with-tooltip"
 import { ChatInput } from "@/components/chat-input"
+import { DiagramPresetSelector } from "@/components/diagram-preset-selector"
 import Image from "@/components/image-with-basepath"
 import { ModelConfigDialog } from "@/components/model-config-dialog"
+import { NewChatChoiceDialog } from "@/components/new-chat-choice-dialog"
+import { SessionHistoryPopover } from "@/components/session-history-popover"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { useDiagram } from "@/contexts/diagram-context"
 import { useDiagramToolHandlers } from "@/hooks/use-diagram-tool-handlers"
@@ -32,6 +36,21 @@ import { useSessionManager } from "@/hooks/use-session-manager"
 import { useValidateDiagram } from "@/hooks/use-validate-diagram"
 import { getApiEndpoint } from "@/lib/base-path"
 import { findCachedResponse } from "@/lib/cached-responses"
+import { CHAT_STREAM_THROTTLE_MS } from "@/lib/chat-streaming-performance"
+import { parseDiagramImportContent } from "@/lib/diagram-import"
+import {
+    combineDiagramPresets,
+    createCustomDiagramPreset,
+    type DiagramPreset,
+    type DiagramPresetInput,
+    getEnabledDiagramPresets,
+    getSelectedDiagramPreset,
+    readCustomDiagramPresets,
+    readSelectedDiagramPresetId,
+    updateCustomDiagramPreset,
+    writeCustomDiagramPresets,
+    writeSelectedDiagramPresetId,
+} from "@/lib/diagram-presets"
 import { formatMessage } from "@/lib/i18n/utils"
 import { isPdfFile, isTextFile } from "@/lib/pdf-utils"
 import { sanitizeMessages } from "@/lib/session-storage"
@@ -39,7 +58,12 @@ import { STORAGE_KEYS } from "@/lib/storage"
 import type { UrlData } from "@/lib/url-utils"
 import { type FileData, useFileProcessor } from "@/lib/use-file-processor"
 import { useQuotaManager } from "@/lib/use-quota-manager"
-import { cn, formatXML, isRealDiagram } from "@/lib/utils"
+import {
+    cn,
+    isRealDiagram,
+    resolveDiagramXmlForRequest,
+    validateAndFixXml,
+} from "@/lib/utils"
 import type { ValidationState } from "./chat/ValidationCard"
 import { ChatMessageDisplay } from "./chat-message-display"
 import { DevXmlSimulator } from "./dev-xml-simulator"
@@ -166,6 +190,9 @@ export default function ChatPanel({
 
     const [showSettingsDialog, setShowSettingsDialog] = useState(false)
     const [showModelConfigDialog, setShowModelConfigDialog] = useState(false)
+    const [showNewChatChoiceDialog, setShowNewChatChoiceDialog] =
+        useState(false)
+    const [isStartingFreshChat, setIsStartingFreshChat] = useState(false)
 
     // Model configuration hook
     const modelConfig = useModelConfig()
@@ -180,7 +207,25 @@ export default function ChatPanel({
     const [minimalStyle, setMinimalStyle] = useState(false)
     const [vlmValidationEnabled, setVlmValidationEnabled] = useState(false)
     const [customSystemMessage, setCustomSystemMessage] = useState("")
+    const [customDiagramPresets, setCustomDiagramPresets] = useState<
+        DiagramPreset[]
+    >([])
+    const [selectedDiagramPresetId, setSelectedDiagramPresetId] = useState<
+        string | null
+    >(null)
     const [shouldFocusInput, setShouldFocusInput] = useState(false)
+    const diagramPresets = useMemo(
+        () => combineDiagramPresets(customDiagramPresets),
+        [customDiagramPresets],
+    )
+    const enabledDiagramPresets = useMemo(
+        () => getEnabledDiagramPresets(diagramPresets),
+        [diagramPresets],
+    )
+    const selectedDiagramPreset = useMemo(
+        () => getSelectedDiagramPreset(diagramPresets, selectedDiagramPresetId),
+        [diagramPresets, selectedDiagramPresetId],
+    )
 
     // Restore input from sessionStorage on mount (when ChatPanel remounts due to key change)
     useEffect(() => {
@@ -203,6 +248,23 @@ export default function ChatPanel({
         const stored = localStorage.getItem(STORAGE_KEYS.customSystemMessage)
         if (stored !== null) {
             setCustomSystemMessage(stored)
+        }
+    }, [])
+
+    useEffect(() => {
+        const storedCustomPresets = readCustomDiagramPresets()
+        const storedSelectedPresetId = readSelectedDiagramPresetId()
+        const allPresets = combineDiagramPresets(storedCustomPresets)
+        const resolvedPreset = getSelectedDiagramPreset(
+            allPresets,
+            storedSelectedPresetId,
+        )
+
+        setCustomDiagramPresets(storedCustomPresets)
+        setSelectedDiagramPresetId(resolvedPreset?.id ?? null)
+
+        if (!resolvedPreset && storedSelectedPresetId) {
+            writeSelectedDiagramPresetId(null)
         }
     }, [])
 
@@ -322,6 +384,74 @@ export default function ChatPanel({
         localStorage.setItem(STORAGE_KEYS.customSystemMessage, value)
     }, [])
 
+    const handleSelectDiagramPreset = useCallback(
+        (presetId: string | null) => {
+            const resolvedPreset = getSelectedDiagramPreset(
+                diagramPresets,
+                presetId,
+            )
+            const nextPresetId = resolvedPreset?.id ?? null
+            setSelectedDiagramPresetId(nextPresetId)
+            writeSelectedDiagramPresetId(nextPresetId)
+        },
+        [diagramPresets],
+    )
+
+    const handleCreateDiagramPreset = useCallback(
+        (input: DiagramPresetInput) => {
+            const nextPreset = createCustomDiagramPreset(input)
+            setCustomDiagramPresets((current) => {
+                const nextPresets = [nextPreset, ...current]
+                writeCustomDiagramPresets(nextPresets)
+                return nextPresets
+            })
+            setSelectedDiagramPresetId(nextPreset.id)
+            writeSelectedDiagramPresetId(nextPreset.id)
+        },
+        [],
+    )
+
+    const handleUpdateDiagramPreset = useCallback(
+        (presetId: string, input: DiagramPresetInput) => {
+            setCustomDiagramPresets((current) => {
+                const nextPresets = current.map((preset) =>
+                    preset.id === presetId
+                        ? updateCustomDiagramPreset(preset, input)
+                        : preset,
+                )
+                writeCustomDiagramPresets(nextPresets)
+                return nextPresets
+            })
+
+            if (
+                selectedDiagramPresetId === presetId &&
+                input.enabled === false
+            ) {
+                setSelectedDiagramPresetId(null)
+                writeSelectedDiagramPresetId(null)
+            }
+        },
+        [selectedDiagramPresetId],
+    )
+
+    const handleDeleteDiagramPreset = useCallback(
+        (presetId: string) => {
+            setCustomDiagramPresets((current) => {
+                const nextPresets = current.filter(
+                    (preset) => preset.id !== presetId,
+                )
+                writeCustomDiagramPresets(nextPresets)
+                return nextPresets
+            })
+
+            if (selectedDiagramPresetId === presetId) {
+                setSelectedDiagramPresetId(null)
+                writeSelectedDiagramPresetId(null)
+            }
+        },
+        [selectedDiagramPresetId],
+    )
+
     // Ref to store the sendMessage function for use in callbacks
     const sendMessageRef = useRef<typeof sendMessage | null>(null)
 
@@ -363,6 +493,7 @@ export default function ChatPanel({
         setMessages,
         stop,
     } = useChat({
+        experimental_throttle: CHAT_STREAM_THROTTLE_MS,
         transport: new DefaultChatTransport({
             api: getApiEndpoint("/api/chat"),
         }),
@@ -836,8 +967,10 @@ export default function ChatPanel({
             }
 
             try {
-                let chartXml = await onFetchChart()
-                chartXml = formatXML(chartXml)
+                const chartXml = await resolveDiagramXmlForRequest({
+                    currentXml: chartXMLRef.current,
+                    exportDiagramXml: () => onFetchChart(false),
+                })
 
                 // Update ref directly to avoid race condition with React's async state update
                 // This ensures edit_diagram has the correct XML before AI responds
@@ -871,6 +1004,7 @@ export default function ChatPanel({
                 xmlSnapshotsRef.current.set(messageIndex, chartXml)
 
                 sendChatMessage(parts, chartXml, previousXml, sessionId)
+                scheduleHistorySnapshotCapture(chartXml)
 
                 // Token count is tracked in onFinish with actual server usage
                 setInput("")
@@ -935,53 +1069,105 @@ export default function ChatPanel({
         [sessionManager, syncUIWithSession, router, pathname],
     )
 
-    const handleNewChat = useCallback(async () => {
-        // Save current session before creating new one
-        if (sessionManager.isAvailable && messages.length > 0) {
-            const sessionData = await buildSessionData({ withThumbnail: true })
-            await sessionManager.saveCurrentSession(sessionData)
-            // Refresh sessions list to ensure dropdown shows the saved session
-            await sessionManager.refreshSessions()
-        }
+    const startFreshChat = useCallback(
+        async ({ importedXml }: { importedXml?: string } = {}) => {
+            setIsStartingFreshChat(true)
 
-        // Clear session manager state BEFORE clearing URL to prevent race condition
-        // (otherwise the URL update effect would restore the old session URL)
-        sessionManager.clearCurrentSession()
+            try {
+                const hasRealDiagram = isRealDiagram(chartXMLRef.current)
 
-        // Clear UI state (can't use syncUIWithSession here because we also need to clear files)
-        setMessages([])
-        setInput("")
-        clearDiagram()
-        setDiagramHistory([])
-        setValidationStates({}) // Clear validation states to prevent memory leak
-        handleFileChange([]) // Use handleFileChange to also clear pdfData
-        setUrlData(new Map())
-        const newSessionId = `session-${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2, 9)}`
-        setSessionId(newSessionId)
-        xmlSnapshotsRef.current.clear()
-        sessionStorage.removeItem(SESSION_STORAGE_INPUT_KEY)
-        toast.success(dict.dialogs.clearSuccess)
+                // Save current session before creating a new one.
+                if (
+                    sessionManager.isAvailable &&
+                    (messages.length > 0 || hasRealDiagram)
+                ) {
+                    const sessionData = await buildSessionData({
+                        withThumbnail: hasRealDiagram,
+                    })
+                    await sessionManager.saveCurrentSession(sessionData)
+                    await sessionManager.refreshSessions()
+                }
 
-        // Clear URL param to show blank state
-        router.replace(pathname, { scroll: false })
+                // Clear session manager state BEFORE clearing URL to prevent race condition.
+                sessionManager.clearCurrentSession()
 
-        // After starting a fresh chat, move focus back to the chat input
-        setShouldFocusInput(true)
-    }, [
-        clearDiagram,
-        handleFileChange,
-        setMessages,
-        setSessionId,
-        sessionManager,
-        messages,
-        router,
-        dict.dialogs.clearSuccess,
-        buildSessionData,
-        setDiagramHistory,
-        pathname,
-    ])
+                setMessages([])
+                setInput("")
+                clearDiagram()
+                setDiagramHistory([])
+                setValidationStates({})
+                handleFileChange([])
+                setUrlData(new Map())
+
+                const newSessionId = `session-${Date.now()}-${Math.random()
+                    .toString(36)
+                    .slice(2, 9)}`
+                setSessionId(newSessionId)
+                xmlSnapshotsRef.current.clear()
+                sessionStorage.removeItem(SESSION_STORAGE_INPUT_KEY)
+
+                if (importedXml) {
+                    onDisplayChart(importedXml, true)
+                    chartXMLRef.current = importedXml
+                } else {
+                    toast.success(dict.dialogs.clearSuccess)
+                }
+
+                router.replace(pathname, { scroll: false })
+                setShouldFocusInput(true)
+            } finally {
+                setIsStartingFreshChat(false)
+            }
+        },
+        [
+            buildSessionData,
+            clearDiagram,
+            dict.dialogs.clearSuccess,
+            handleFileChange,
+            messages.length,
+            onDisplayChart,
+            pathname,
+            router,
+            sessionManager,
+        ],
+    )
+
+    const handleNewChat = useCallback(() => {
+        setShowNewChatChoiceDialog(true)
+    }, [])
+
+    const handleStartBlankChat = useCallback(async () => {
+        await startFreshChat()
+        setShowNewChatChoiceDialog(false)
+    }, [startFreshChat])
+
+    const handleImportIntoNewChat = useCallback(
+        async (file: File) => {
+            try {
+                const content = await file.text()
+                const parsedXml = parseDiagramImportContent(file.name, content)
+                const validation = validateAndFixXml(parsedXml)
+
+                if (!validation.valid) {
+                    throw new Error(
+                        validation.error || dict.errors.failedToImportDiagram,
+                    )
+                }
+
+                const normalizedXml = validation.fixed || parsedXml
+                await startFreshChat({ importedXml: normalizedXml })
+                setShowNewChatChoiceDialog(false)
+            } catch (error) {
+                console.error("Failed to import diagram:", error)
+                toast.error(
+                    error instanceof Error && error.message
+                        ? error.message
+                        : dict.errors.failedToImportDiagram,
+                )
+            }
+        },
+        [dict.errors.failedToImportDiagram, startFreshChat],
+    )
 
     // Handle sending a template directly (called from TemplatePanel)
     const handleSendTemplate = useCallback(
@@ -1084,6 +1270,14 @@ export default function ChatPanel({
                     previousXml,
                     sessionId,
                     customSystemMessage,
+                    ...(selectedDiagramPreset && {
+                        diagramPreset: {
+                            id: selectedDiagramPreset.id,
+                            title: selectedDiagramPreset.title,
+                            description: selectedDiagramPreset.description,
+                            instructions: selectedDiagramPreset.instructions,
+                        },
+                    }),
                     ...(selectionContextEnabled &&
                         selectionContext.trim() && {
                             selectionContext: selectionContext.trim(),
@@ -1130,6 +1324,25 @@ export default function ChatPanel({
             },
         )
     }
+
+    const scheduleHistorySnapshotCapture = useCallback(
+        (xml: string) => {
+            if (!isRealDiagram(xml)) {
+                return
+            }
+
+            const schedule =
+                typeof window.requestAnimationFrame === "function"
+                    ? window.requestAnimationFrame
+                    : (callback: FrameRequestCallback) =>
+                          window.setTimeout(callback, 0)
+
+            schedule(() => {
+                onExport()
+            })
+        },
+        [onExport],
+    )
 
     // Process files and append content to user text (handles PDF, text, and optionally images)
     const processFilesAndAppendContent = async (
@@ -1350,6 +1563,15 @@ export default function ChatPanel({
                         </div>
                     </button>
                     <div className="flex items-center gap-1 justify-end overflow-visible">
+                        <SessionHistoryPopover
+                            sessions={sessionManager.sessions}
+                            currentSessionId={currentSessionId}
+                            onSelect={handleSelectSession}
+                            disabled={
+                                status === "streaming" || status === "submitted"
+                            }
+                        />
+
                         <ButtonWithTooltip
                             tooltipContent={dict.nav.newChat}
                             variant="ghost"
@@ -1392,6 +1614,17 @@ export default function ChatPanel({
                             )}
                         </div>
                     </div>
+                </div>
+
+                <div className="mt-3 flex items-center gap-2 overflow-visible">
+                    <DiagramPresetSelector
+                        presets={enabledDiagramPresets}
+                        selectedPresetId={selectedDiagramPresetId}
+                        onSelect={handleSelectDiagramPreset}
+                        disabled={
+                            status === "streaming" || status === "submitted"
+                        }
+                    />
                 </div>
             </header>
 
@@ -1470,6 +1703,10 @@ export default function ChatPanel({
                 onVlmValidationChange={handleVlmValidationChange}
                 customSystemMessage={customSystemMessage}
                 onCustomSystemMessageChange={handleCustomSystemMessageChange}
+                diagramPresets={diagramPresets}
+                onCreateDiagramPreset={handleCreateDiagramPreset}
+                onUpdateDiagramPreset={handleUpdateDiagramPreset}
+                onDeleteDiagramPreset={handleDeleteDiagramPreset}
                 onOpenModelConfig={() => setShowModelConfigDialog(true)}
             />
 
@@ -1477,6 +1714,14 @@ export default function ChatPanel({
                 open={showModelConfigDialog}
                 onOpenChange={setShowModelConfigDialog}
                 modelConfig={modelConfig}
+            />
+
+            <NewChatChoiceDialog
+                open={showNewChatChoiceDialog}
+                onOpenChange={setShowNewChatChoiceDialog}
+                onStartBlank={handleStartBlankChat}
+                onImport={handleImportIntoNewChat}
+                disabled={isStartingFreshChat}
             />
         </div>
     )

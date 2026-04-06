@@ -196,7 +196,8 @@ export async function getSession(id: string): Promise<ChatSession | null> {
     if (!isIndexedDBAvailable()) return null
     try {
         return await withDB(async (db) => {
-            return (await db.get(STORE_NAME, id)) || null
+            const session = await db.get(STORE_NAME, id)
+            return session ? normalizeSessionForStorage(session) : null
         })
     } catch (error) {
         console.error("Failed to get session:", error)
@@ -207,8 +208,9 @@ export async function getSession(id: string): Promise<ChatSession | null> {
 export async function saveSession(session: ChatSession): Promise<boolean> {
     if (!isIndexedDBAvailable()) return false
     try {
+        const normalizedSession = normalizeSessionForStorage(session)
         await withDB(async (db) => {
-            await db.put(STORE_NAME, session)
+            await db.put(STORE_NAME, normalizedSession)
         })
         return true
     } catch (error) {
@@ -221,8 +223,9 @@ export async function saveSession(session: ChatSession): Promise<boolean> {
             await deleteOldestSession()
             // Retry once
             try {
+                const normalizedSession = normalizeSessionForStorage(session)
                 await withDB(async (db) => {
-                    await db.put(STORE_NAME, session)
+                    await db.put(STORE_NAME, normalizedSession)
                 })
                 return true
             } catch (retryError) {
@@ -352,10 +355,55 @@ export function sanitizeMessage(message: unknown): StoredMessage | null {
     }
 }
 
+function hasIncompleteStreamingPart(part: {
+    type: string
+    [key: string]: unknown
+}): boolean {
+    if (
+        (part.type === "text" || part.type === "reasoning") &&
+        part.state === "streaming"
+    ) {
+        return true
+    }
+
+    if (
+        part.type.startsWith("tool-") &&
+        (part.state === "input-streaming" || part.state === "input-available")
+    ) {
+        return true
+    }
+
+    return false
+}
+
+export function stripIncompleteAssistantTail(
+    messages: StoredMessage[],
+): StoredMessage[] {
+    const lastMessage = messages[messages.length - 1]
+    if (!lastMessage || lastMessage.role !== "assistant") {
+        return messages
+    }
+
+    const hasIncompleteParts = lastMessage.parts.some((part) =>
+        hasIncompleteStreamingPart(part),
+    )
+
+    return hasIncompleteParts ? messages.slice(0, -1) : messages
+}
+
 export function sanitizeMessages(messages: unknown[]): StoredMessage[] {
-    return messages
+    const sanitizedMessages = messages
         .map(sanitizeMessage)
         .filter((m): m is StoredMessage => m !== null)
+
+    return stripIncompleteAssistantTail(sanitizedMessages)
+}
+
+function normalizeSessionForStorage(session: ChatSession): ChatSession {
+    return {
+        ...session,
+        messages: stripIncompleteAssistantTail(session.messages),
+    }
 }
 
 // Migration from localStorage

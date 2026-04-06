@@ -56,6 +56,25 @@ function OperationsDisplay({ operations }: { operations: DiagramOperation[] }) {
     )
 }
 
+function getStreamingInputSummary(part: ToolPartLike) {
+    const { input } = part
+
+    if (!input || typeof input !== "object") {
+        return null
+    }
+
+    if (typeof input.xml === "string") {
+        return `Streaming XML input: ${input.xml.length.toLocaleString()} chars received. Full content will appear after completion.`
+    }
+
+    if (Array.isArray(input.operations)) {
+        return `Streaming edit operations: ${input.operations.length.toLocaleString()} operation(s) received. Full details will appear after completion.`
+    }
+
+    const fieldCount = Object.keys(input).length
+    return `Streaming tool input: ${fieldCount.toLocaleString()} field(s) received. Full details will appear after completion.`
+}
+
 export function ToolCallCard({
     part,
     expandedTools,
@@ -67,8 +86,11 @@ export function ToolCallCard({
 }: ToolCallCardProps) {
     const callId = part.toolCallId
     const { state, input, output } = part
-    // Default to expanded for all states (user can manually collapse if needed)
-    const isExpanded = expandedTools[callId] ?? true
+    const isInputStreaming =
+        state === "input-streaming" || state === "input-available"
+    const streamingInputSummary = getStreamingInputSummary(part)
+    const defaultExpanded = state !== "output-available"
+    const isExpanded = expandedTools[callId] ?? defaultExpanded
     const toolName = part.type?.replace("tool-", "")
     const isCopied = copiedToolCallId === callId
 
@@ -194,7 +216,11 @@ export function ToolCallCard({
             </div>
             {input && isExpanded && (
                 <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
-                    {typeof input === "object" && input.xml ? (
+                    {isInputStreaming && streamingInputSummary ? (
+                        <div className="text-xs leading-5 text-muted-foreground">
+                            {streamingInputSummary}
+                        </div>
+                    ) : typeof input === "object" && input.xml ? (
                         <CodeBlock code={input.xml} language="xml" />
                     ) : typeof input === "object" &&
                       input.operations &&

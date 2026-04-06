@@ -41,11 +41,52 @@ test.describe("History and Session Restore", () => {
             await newChatButton.click()
         })
 
+        await test.step("confirm the blank-chat action from the chooser dialog", async () => {
+            await expect(
+                page.locator('[data-testid="new-chat-choice-dialog"]'),
+            ).toBeVisible({ timeout: 5000 })
+            await page
+                .locator('[data-testid="new-chat-choice-start-blank"]')
+                .click()
+        })
+
         await test.step("verify conversation is cleared", async () => {
             await expect(
                 page.locator('text="Created your test diagram."'),
             ).not.toBeVisible({ timeout: 5000 })
         })
+    })
+
+    test("cancel from new chat chooser keeps the current conversation", async ({
+        page,
+    }) => {
+        await page.route("**/api/chat", async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: "text/event-stream",
+                body: createMockSSEResponse(
+                    SINGLE_BOX_XML,
+                    "Keep this conversation intact.",
+                ),
+            })
+        })
+
+        await page.goto("/", { waitUntil: "networkidle" })
+        await getIframe(page).waitFor({ state: "visible", timeout: 30000 })
+
+        await sendMessage(page, "Create a dialog-cancel diagram")
+        await waitForText(page, "Keep this conversation intact.")
+
+        await page.locator('[data-testid="new-chat-button"]').click()
+        await expect(
+            page.locator('[data-testid="new-chat-choice-dialog"]'),
+        ).toBeVisible({ timeout: 5000 })
+
+        await page.locator('[data-testid="new-chat-choice-cancel"]').click()
+
+        await expect(
+            page.locator('text="Keep this conversation intact."'),
+        ).toBeVisible({ timeout: 5000 })
     })
 
     test("chat history sidebar shows past conversations", async ({ page }) => {
