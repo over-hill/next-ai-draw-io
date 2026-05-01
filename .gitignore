@@ -55,6 +55,7 @@ push-via-ec2.sh
 # Electron
 /dist-electron/
 /release/
+/release-win/
 /electron-standalone/
 # Draw.io static files (downloaded during CI build)
 public/drawio/
